@@ -34,19 +34,19 @@ func (c *Client) loadRemotes(remotes []models.Remote) {
 		if remote.TLS && c.config.Server.TLS.Enable {
 			tlsConfig, err := ctls.GetTLSConfig(c.config)
 			if err != nil {
-				println(err)
+				println(err.Error())
 				continue
 			}
 			conn, err := tls.Dial("tcp", addr, tlsConfig)
 			if err != nil {
-				println(err)
+				println(err.Error())
 				continue
 			}
 			c.conns[UnRegisterForm(conn)] = conn
 		} else {
 			conn, err := net.Dial("tcp", addr)
 			if err != nil {
-				println(err)
+				println(err.Error())
 				continue
 			}
 			c.conns[UnRegisterForm(conn)] = conn
@@ -57,25 +57,25 @@ func (c *Client) loadRemotes(remotes []models.Remote) {
 func (c *Client) runReader() {
 	var wg sync.WaitGroup
 	for {
-		for hd, conn := range c.conns {
+		for key, conn := range c.conns {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				for {
 					msg, err := c.packer.Unpack(conn)
 					if err != nil {
-						println(err)
+						println(err.Error())
 						continue
 					}
 					switch msg.ID() {
 					case p.MSG_ID_TUNNEL_RES:
-						c.handle_tunnel(hd, conn, msg)
+						c.handle_tunnel(key, conn, msg)
 					case p.MSG_ID_PACKET_RES:
-						c.handle_packet(hd, conn, msg)
+						c.handle_packet(key, conn, msg)
 					case p.MSG_ID_INFO_RES:
-						c.handle_info(hd, conn, msg)
+						c.handle_info(key, conn, msg)
 					case p.MSG_ID_TEST_RES:
-						c.handle_test(hd, conn, msg)
+						c.handle_test(key, conn, msg)
 					default:
 						continue
 					}

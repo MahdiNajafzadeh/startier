@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"startier/config"
 	"startier/internal/node/client"
+	p "startier/internal/node/common/protocol"
 	"startier/internal/node/database"
 	"startier/internal/node/tun"
 
@@ -18,7 +19,7 @@ type Server struct {
 	tun      *tun.Tun
 }
 type Route struct {
-	Name    string
+	ID      interface{}
 	Handler func(easytcp.Context)
 }
 
@@ -56,12 +57,16 @@ func (s *Server) Run(ch chan error) {
 
 func (s *Server) LoadRoutes() {
 	for _, r := range s.GetRoutes() {
-		s.server.AddRoute(r.Name, r.Handler)
+		s.server.AddRoute(r.ID, r.Handler)
+		fmt.Printf("%T %v\n", r.ID, r.ID)
 	}
 }
 
 func (s *Server) GetRoutes() []Route {
 	return []Route{
-		{Name: "INFO", Handler: s._InfoHandler},
+		{ID: p.MSG_ID_INFO_REQ, Handler: s.handleInfo},
+		// {ID: p.MSG_ID_INFO_REQ, Handler: s.handle_info},
+		// {ID: p.MSG_ID_INFO_REQ, Handler: s.handle_info},
+		// {ID: p.MSG_ID_INFO_REQ, Handler: s.handle_info},
 	}
 }

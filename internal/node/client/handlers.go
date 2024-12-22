@@ -43,6 +43,7 @@ func (c *Client) handle_info(key string, conn net.Conn, msg *easytcp.Message) er
 			})
 		}
 	}
+	c.conns[key] = conn
 	return nil
 }
 func (c *Client) handle_packet(key string, conn net.Conn, msg *easytcp.Message) error {
@@ -50,7 +51,7 @@ func (c *Client) handle_packet(key string, conn net.Conn, msg *easytcp.Message) 
 	if err := c.decode(msg, res); err != nil {
 		return err
 	}
-
+	c.conns[key] = conn
 	return nil
 }
 func (c *Client) handle_tunnel(key string, conn net.Conn, msg *easytcp.Message) error {
@@ -58,6 +59,7 @@ func (c *Client) handle_tunnel(key string, conn net.Conn, msg *easytcp.Message) 
 	if err := c.decode(msg, res); err != nil {
 		return err
 	}
+	c.conns[key] = conn
 	return nil
 }
 func (c *Client) handle_test(key string, conn net.Conn, msg *easytcp.Message) error {
@@ -65,5 +67,6 @@ func (c *Client) handle_test(key string, conn net.Conn, msg *easytcp.Message) er
 	if err := c.decode(msg, res); err != nil {
 		return err
 	}
+	c.conns[key] = conn
 	return nil
 }
