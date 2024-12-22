@@ -30,16 +30,16 @@ func (c *Client) handle_info(key string, conn net.Conn, msg *easytcp.Message) er
 			c.database.RegisterNode(&node)
 		}
 		for _, r := range n.Remotes {
-			c.database.RegisterRemote(&n, &models.Remote{
+			c.database.RegisterRemote(&node, &models.Remote{
 				Host: r.GetHost(),
 				Port: int(r.GetPort()),
-				TLS : r.GetTLS(),
+				TLS:  r.GetTLS(),
 			})
 		}
 		for _, a := range n.Addresses {
-			c.database.RegisterAddress(&n, &models.Address{
+			c.database.RegisterAddress(&node, &models.Address{
 				Address: a.GetAddress(),
-				Mask: int(a.GetMask()),
+				Mask:    int(a.GetMask()),
 			})
 		}
 	}
@@ -50,7 +50,7 @@ func (c *Client) handle_packet(key string, conn net.Conn, msg *easytcp.Message) 
 	if err := c.decode(msg, res); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 func (c *Client) handle_tunnel(key string, conn net.Conn, msg *easytcp.Message) error {
