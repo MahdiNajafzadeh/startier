@@ -6,18 +6,36 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"startier/config"
+	"startier/internal/node"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-var cfgFile string
+var (
+	cfgFile   string
+	appConfig *config.Config
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "startier",
 	Short: "",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
+		if appConfig == nil {
+			fmt.Println("Config is not loaded.")
+			return
+		}
+		// fmt.Printf("Config loaded: %+v\n", appConfig)
+		n, err := node.New(appConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error In Initialisation Node : %+v", err)
+			os.Exit(1)
+		}
+		if err = n.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error In Running Node : %+v", err)
+			os.Exit(1)
+		}
 	},
 }
 
@@ -35,17 +53,15 @@ func init() {
 }
 
 func initConfig() {
+	var err error
+	configPath := "/etc/startier"
 	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		viper.AddConfigPath("/etc/startier")
-		viper.SetConfigType("json")
-		viper.SetConfigName("config")
+		configPath = cfgFile
 	}
-
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	appConfig, err = config.LoadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
 	}
+	// fmt.Fprintf(os.Stderr, "Using config: %+v\n", appConfig)
 }

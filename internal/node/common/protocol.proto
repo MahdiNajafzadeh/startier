@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+option go_package = "/protocol";
+
+// -- DataStruct --
+
+message Remote {
+    string Host = 1;
+    int32 Port = 2;
+    bool TLS = 3;
+}
+
+message Address {
+    string Address = 1;
+    int32 Mask = 2;
+}
+
+message Node {
+    string Hostname = 1;
+    string Domain = 2;
+    repeated Remote Remotes = 3;
+    repeated Address Addresses = 4;
+    bool IsMe = 5;
+}
+
+// -- Protocol --
+
+enum MSG_ID {
+    _ = 0;
+    INFO_REQ = 1;
+    INFO_RES = 2;
+    PACKET_REQ = 3;
+    PACKET_RES = 4;
+    TUNNEL_REQ = 5;
+    TUNNEL_RES = 6;
+    TEST_REQ = 7;
+    TEST_RES = 8;
+}
+
+message InfoReq {}
+
+message InfoRes {
+    int32 Code = 1;
+    repeated Node Nodes = 2;
+}
+
+message PacketReq {
+    bytes PayLoad = 1;
+}
+
+message PacketRes {
+    int32 Code = 1;
+}
+
+message TunnelReq {
+    Address Destination = 1;
+    bytes PayLoad = 2;
+}
+
+message TunnelRes {
+    int32 Code = 1;
+}
+
+message TestReq {}
+message TestRes {}

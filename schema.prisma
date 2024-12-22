@@ -1,0 +1,61 @@
+model Node {
+    ID            Int          @id @default(autoincrement())
+    Hostname      String
+    Domain        String
+    IsMe          Boolean      @default(false)
+    Addresses     Address[]
+    FromRoutes    Route[]      @relation("FromNode")
+    ToRoutes      Route[]      @relation("ToNode")
+    BetweenRoutes Route[]      @relation("BetweenNodes")
+    Connections   Connection[]
+    Remotes       Remote[]
+
+    @@unique([Hostname, Domain])
+}
+
+model Address {
+    ID      Int     @id @default(autoincrement())
+    NodeID  Int
+    Node    Node    @relation(fields: [NodeID], references: [ID])
+    Address String
+    Mask    Int
+    IsMe    Boolean @default(false)
+
+    @@unique([Address, Mask])
+}
+
+model Route {
+    ID      Int    @id @default(autoincrement())
+    FromID  Int
+    From    Node   @relation("FromNode", fields: [FromID], references: [ID])
+    ToID    Int
+    To      Node   @relation("ToNode", fields: [ToID], references: [ID])
+    Between Node[] @relation("BetweenNodes")
+
+    @@unique([FromID, ToID])
+}
+
+model Connection {
+    ID       Int    @id @default(autoincrement())
+    NodeID   Int
+    Node     Node   @relation(fields: [NodeID], references: [ID])
+    RemoteID Int
+    Remote   Remote @relation(fields: [RemoteID], references: [ID])
+    Ping     Int
+
+    @@unique([NodeID, RemoteID])
+}
+
+model Remote {
+    ID     Int     @id @default(autoincrement())
+    NodeID Int
+    Node   Node    @relation(fields: [NodeID], references: [ID])
+    Host   String
+    Port   Int
+    TLS    Boolean @default(false)
+
+    Connection Connection[]
+
+    @@unique([Host, Port])
+    @@unique([NodeID, Host])
+}
