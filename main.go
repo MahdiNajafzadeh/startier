@@ -1,11 +1,18 @@
-/*
-Copyright © 2024 MahdiNajazadeh
-
-*/
 package main
 
-import "startier/cmd"
+import (
+	"flag"
+	"log"
+	"startier/internal/startier"
+)
+
+var configPath string
+
+func init() {
+	flag.StringVar(&configPath, "config", "", "path to config file")
+	flag.Parse()
+}
 
 func main() {
-	cmd.Execute()
+	log.Fatal(startier.Run(configPath))
 }
