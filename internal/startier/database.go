@@ -62,7 +62,7 @@ func MonitorDatabase() {
 	for {
 		nodes := db.GetAllNodes()
 		for _, node := range nodes {
-			fmt.Printf("node : [%v][%v][%v][%#v]\n", node.ID, node.Port, node.Address, node.Addresses)
+			fmt.Printf("[%v] node : [%v][%v][%v][%v]\n", len(nodes), node.ID, node.Address, node.Port, node.Addresses)
 		}
 		time.Sleep(time.Second * 3)
 	}

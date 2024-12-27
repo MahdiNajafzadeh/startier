@@ -40,7 +40,7 @@ func GetReady[T any](getter func() T) T {
 func PostRun(ch chan error) {
 	c := GetConfig()
 	n := GetNetwork()
-	addrs, err := n.GetAddress()
+	addrs, port, err := n.GetAddress()
 	if err != nil {
 		ch <- err
 		return
@@ -51,11 +51,12 @@ func PostRun(ch chan error) {
 				err = n.Request(peer, ID_JOIN, JoinMessage{
 					Node: NodeData{
 						ID:      c.NodeID,
+						Port:    port,
 						Address: c.Address,
 						Remotes: addrs,
 					},
 				})
-				time.Sleep(time.Second * 5)
+				time.Sleep(time.Second)
 				if err != nil {
 					log.Println(err)
 					continue
