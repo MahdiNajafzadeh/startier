@@ -6,10 +6,10 @@ import (
 )
 
 type Config struct {
-	NodeID string   `json:"node_id"`
-	IP     string   `json:"ip"`
-	Port   string   `json:"port"`
-	Peers  []string `json:"peers"`
+	NodeID  string   `json:"node_id"`
+	Address string   `json:"address"`
+	Listen  string   `json:"listen"`
+	Peers   []string `json:"peers"`
 }
 
 var _config *Config
@@ -30,4 +30,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	_config = &config
 	return _config, nil
+}
+
+func (c *Config) ToJSON() string {
+	b, _ := json.Marshal(c)
+	return string(b)
 }

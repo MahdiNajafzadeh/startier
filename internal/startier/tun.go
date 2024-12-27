@@ -47,7 +47,7 @@ func NewTun() (*water.Interface, error) {
 		return nil, err
 	}
 	config := GetConfig()
-	ip, ipnet, err := net.ParseCIDR(config.IP)
+	ip, ipnet, err := net.ParseCIDR(config.Address)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +75,6 @@ func LoopTun(ch chan error) {
 			continue
 		}
 		dst := waterutil.IPv4Destination(buf[:n])
-		dst.To4()
+		log.Println(dst.To4().String())
 	}
 }

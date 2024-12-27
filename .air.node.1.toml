@@ -22,8 +22,8 @@ poll = false
 poll_interval = 0
 post_cmd = []
 pre_cmd = [
-  "sudo -u mahdi rm -rf /home/mahdi/mount/edge.tartanak.local/st/*",
-  "sudo -u mahdi cp -rf /home/mahdi/st /home/mahdi/mount/edge.tartanak.local",
+  "sudo -u mahdi rm -rf /home/mahdi/mount/edge.tartanak.local/startier/*",
+  "sudo -u mahdi cp -rf /home/mahdi/Documents/projects/startier /home/mahdi/mount/edge.tartanak.local",
 ]
 rerun = false
 rerun_delay = 500
