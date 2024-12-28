@@ -47,7 +47,7 @@ func NewTun() (*water.Interface, error) {
 		return nil, err
 	}
 	config := GetConfig()
-	ip, ipnet, err := net.ParseCIDR(config.Address)
+	ip, ipnet, err := net.ParseCIDR(config.Local)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +64,10 @@ func NewTun() (*water.Interface, error) {
 }
 
 func LoopTun(ch chan error) {
+	tun := GetReady(GetTun)
 	buf := make([]byte, 1500)
 	for {
-		n, err := GetTun().Read(buf)
+		n, err := tun.Read(buf)
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -74,7 +75,7 @@ func LoopTun(ch chan error) {
 		if !waterutil.IsIPv4(buf[:n]) {
 			continue
 		}
-		dst := waterutil.IPv4Destination(buf[:n])
-		log.Println(dst.To4().String())
+		// dst := waterutil.IPv4Destination(buf[:n])
+		// log.Println(dst.To4().String())
 	}
 }

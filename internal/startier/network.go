@@ -61,47 +61,49 @@ func (n *Network) LoopAccept() {
 func (n *Network) LoopHandle(conn net.Conn) {
 	defer conn.Close()
 	buf := make([]byte, 2048)
-	db := GetDatabase()
-	log.Println(conn.RemoteAddr().String())
 	for {
-		bufLen, err := conn.Read(buf)
+		_, err := conn.Read(buf)
 		if err != nil {
 			if err == io.EOF {
+				log.Println("Connection closed by peer")
+				conn.Close()
 				break
 			}
+			log.Printf("Error reading data: %v", err)
 			continue
 		}
-		switch id := buf[0]; ID(id) {
+		id := ID(buf[0])
+		switch id {
+		case ID_INFO:
+			{
+				err = InfoHandler(conn, buf)
+				if err != nil {
+					log.Println(err)
+				}
+			}
 		case ID_JOIN:
 			{
-				var msg JoinMessage
-				_, err := n.packer.Unpack(buf[:bufLen], &msg)
+				err = JoinHandler(conn, buf)
 				if err != nil {
-					log.Printf("error in json message handle : %v", err)
-					break
+					log.Println(err)
 				}
-				log.Printf("%#+v", msg.Node.ID)
-				if _, ok := db.GetNode(msg.Node.ID); !ok {
-					log.Println("node no exsit")
-					db.AddNode(Node{
-						ID:        msg.Node.ID,
-						Port:      msg.Node.Port,
-						Address:   msg.Node.Address,
-						Addresses: msg.Node.Remotes,
-					})
+			}
+		case ID_PACKET:
+			{
+				err = PacketHandler(conn, buf)
+				if err != nil {
+					log.Println(err)
 				}
 			}
 		default:
-			{
-				log.Printf("unknown id : %b", id)
-			}
+			log.Printf("unknown id : %b", id)
 		}
 	}
+	log.Printf("END OF LOOP HANDLE CONNECTION : %v", conn.RemoteAddr())
 }
 
 func (n *Network) Request(target interface{}, id ID, v interface{}) error {
-	log.Printf("%T : %+v", target, target)
-	db := GetDatabase()
+	// db := GetDatabase()
 	switch t := target.(type) {
 	case net.Conn:
 		data, err := n.packer.Pack(id, v)
@@ -111,31 +113,27 @@ func (n *Network) Request(target interface{}, id ID, v interface{}) error {
 		_, err = t.Write(data)
 		return err
 	case string:
-		if node, ok := db.GetNode(t); ok {
-			return n.Request(node, id, v)
-		} else if remote, ok := db.GetRemote(t); ok {
-			return n.Request(remote, id, v)
-		} else {
-			host, _, err := net.SplitHostPort(t)
-			if err != nil {
-				return err
-			}
-			resolvedIPs, err := net.LookupHost(host)
-			if err != nil || len(resolvedIPs) == 0 {
-				return fmt.Errorf("unable to resolve address: %v", err)
-			}
-			conn, err := net.Dial(BASE_NETWORK_PROTOCOL, t)
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
-			return n.Request(conn, id, v)
+		// if node, ok := db.GetNode(t); ok {
+		// 	return n.Request(node, id, v)
+		// } else if remote, ok := db.GetRemote(t); ok {
+		// 	return n.Request(remote, id, v)
+		// } else {
+		_, _, err := net.SplitHostPort(t)
+		if err != nil {
+			return err
 		}
-	case Node:
-		address := fmt.Sprintf("%s:%d", t.Address, t.Port)
-		return n.Request(address, id, v)
-	case Remote:
-		return n.Request(t.Address, id, v)
+		conn, err := net.Dial(BASE_NETWORK_PROTOCOL, t)
+		if err != nil {
+			return err
+		}
+		go n.LoopHandle(conn)
+		return n.Request(conn, id, v)
+		// }
+	// case Node:
+	// 	address := fmt.Sprintf("%s:%d", t.Local, t.Port)
+	// 	return n.Request(address, id, v)
+	// case Remote:
+	// 	return n.Request(t.Node.Local, id, v)
 	default:
 		return fmt.Errorf("unsupported target type: %T", t)
 	}
@@ -160,7 +158,7 @@ func (n *Network) GetAddress() ([]string, int, error) {
 		if err != nil || ip.IsLoopback() || ip.To4() == nil {
 			continue
 		}
-		result = append(result, fmt.Sprintf("%s:%s", ip.To4().String(), port))
+		result = append(result, net.JoinHostPort(ip.To4().String(), port))
 	}
 	nport, err := strconv.Atoi(port)
 	if err != nil {

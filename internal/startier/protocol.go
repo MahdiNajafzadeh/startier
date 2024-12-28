@@ -1,6 +1,8 @@
 package startier
 
-import "github.com/vmihailenco/msgpack/v5"
+import (
+	"github.com/vmihailenco/msgpack/v5"
+)
 
 type ID byte
 
@@ -13,20 +15,15 @@ const (
 	ID_TUNNEL
 )
 
-type NodeData struct {
-	ID      string   `msgp:"id"`
-	Address string   `msgp:"address"`
-	Port    int      `msgp:"port"`
-	Remotes []string `msgp:"remotes"`
-}
-
 // -
 
 type JoinMessage struct {
-	Node NodeData `msgp:"nodes"`
+	Node    Node      `msgp:"node"`
+	Address []Address `msgp:"address"`
 }
 type InfoMessage struct {
-	Nodes []NodeData `msgp:"nodes"`
+	Nodes   []Node    `msgp:"nodes"`
+	Address []Address `msgp:"addresses"`
 }
 type PacketMessage struct {
 	Payload []byte `msgp:"payload"`

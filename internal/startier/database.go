@@ -1,69 +1,203 @@
 package startier
 
 import (
-	"fmt"
-	"sync"
+	"log"
+	"net"
 	"time"
+
+	"github.com/hashicorp/go-memdb"
 )
 
 type Node struct {
-	ID        string   `json:"id"`
-	Address   string   `json:"address"`
-	Port      int      `json:"port"`
-	Addresses []string `json:"addresses"`
+	ID string `json:"id" msgp:"id"`
 }
-
-type Remote struct {
-	NodeID  string `json:"node_id"`
-	Node    *Node  `json:"node"`
-	Address string `json:"address"`
-}
-
 type Address struct {
-	NodeID  string `json:"node_id"`
-	Node    *Node  `json:"node"`
-	Address string `json:"address"`
+	ID string `json:"-" msgp:"-"`
+	// Node      *Node  // `json:"-" msgp:"-"`
+	NodeID    string `json:"node_id" msgp:"node_id"`
+	Host      string `json:"host" msgp:"host"`
+	Port      int    `json:"port" msgp:"port"`
+	Mask      int    `json:"mask" msgp:"mask"`
+	IsPrivate bool   `json:"is_private" msgp:"is_private"`
+}
+type Connection struct {
+	Address  *Address
+	Conn     *net.Conn
+	IsTunnel bool
 }
 
-type DB struct {
-	nodes_mu     *sync.RWMutex
-	nodes        map[string]Node
-	remotes_mu   *sync.RWMutex
-	remotes      map[string]Remote
-	addresses_mu *sync.RWMutex
-	addresses    map[string]Address
+var _schema = &memdb.DBSchema{
+	Tables: map[string]*memdb.TableSchema{
+		"node": {
+			Name: "node",
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+			},
+		},
+		"address": {
+			Name: "address",
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.UUIDFieldIndex{Field: "ID"},
+				},
+				"node_id": {
+					Name:    "node_id",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "NodeID"},
+				},
+				"host": {
+					Name:    "host",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Host"},
+				},
+				"port": {
+					Name:    "port",
+					Unique:  false,
+					Indexer: &memdb.IntFieldIndex{Field: "Port"},
+				},
+				"mask": {
+					Name:    "mask",
+					Unique:  false,
+					Indexer: &memdb.IntFieldIndex{Field: "Mask"},
+				},
+				"is_private": {
+					Name:    "is_private",
+					Unique:  false,
+					Indexer: &memdb.BoolFieldIndex{Field: "IsPrivate"},
+				},
+			},
+		},
+		"connection": {
+			Name: "connection",
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.UUIDFieldIndex{Field: "ID"},
+				},
+				"address_host": {
+					Name:    "address_host",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Address.Host"},
+				},
+				"is_tunnel": {
+					Name:    "is_tunnel",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "IsTunnel"},
+				},
+			},
+		},
+	},
 }
 
-var _db *DB
+var _db *memdb.MemDB
 
-func GetDatabase() *DB {
+func GetDatabase() *memdb.MemDB {
 	return _db
 }
 
-func RunDatabase(ch chan error) {
+func RunDatabase() error {
+	var err error
 	if GetDatabase() == nil {
-		_db = NewDatabase()
+		_db, err = NewDatabase()
 	}
+	return err
 }
 
-func NewDatabase() *DB {
-	return &DB{
-		nodes_mu:     new(sync.RWMutex),
-		nodes:        make(map[string]Node),
-		remotes_mu:   new(sync.RWMutex),
-		remotes:      make(map[string]Remote),
-		addresses_mu: new(sync.RWMutex),
-		addresses:    make(map[string]Address),
-	}
+func NewDatabase() (*memdb.MemDB, error) {
+	return memdb.NewMemDB(_schema)
 }
 
 func MonitorDatabase() {
-	db := GetReady(GetDatabase)
 	for {
-		nodes := db.GetAllNodes()
-		for _, node := range nodes {
-			fmt.Printf("[%v] node : [%v][%v][%v][%v]\n", len(nodes), node.ID, node.Address, node.Port, node.Addresses)
+		time.Sleep(time.Second * 5)
+		// nodes, _ := GetAllEntry[*Node]("node", "id")
+		// for _, node := range nodes {
+		// 	log.Printf("node [%v]", node.ID)
+		// }
+		addresses, _ := GetAllEntry[*Address]("address", "id")
+		log.Println("---")
+		for _, address := range addresses {
+			log.Printf("address [%#+v]", address)
 		}
-		time.Sleep(time.Second * 3)
 	}
+}
+
+func CreateEntry(table string, obj interface{}) error {
+	db := GetDatabase()
+	txn := db.Txn(true)
+	defer txn.Abort()
+	err := txn.Insert(table, obj)
+	if err != nil {
+		return err
+	} else {
+		txn.Commit()
+		return nil
+	}
+}
+
+func DeleteEntry(table string, obj interface{}) error {
+	db := GetDatabase()
+	txn := db.Txn(true)
+	defer txn.Abort()
+	err := txn.Delete(table, obj)
+	if err != nil {
+		return err
+	} else {
+		txn.Commit()
+		return nil
+	}
+}
+
+func UpdateEntry(table string, id string, old interface{}, new interface{}) error {
+	db := GetDatabase()
+	txn := db.Txn(true)
+	defer txn.Abort()
+	err := txn.Delete(table, old)
+	if err != nil {
+		return err
+	}
+	err = txn.Insert(table, new)
+	if err != nil {
+		return err
+	} else {
+		txn.Commit()
+		return nil
+	}
+}
+
+func GetAllEntry[T any](table string, id string, args ...interface{}) ([]T, error) {
+	db := GetDatabase()
+	txn := db.Txn(false)
+	defer txn.Abort()
+	all := []T{}
+	it, err := txn.Get(table, id, args...)
+	if err != nil {
+		return all, err
+	}
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		all = append(all, obj.(T))
+	}
+	return all, err
+}
+
+func GetEntry[T any](table string, id string, args ...interface{}) (T, error) {
+	db := GetDatabase()
+	txn := db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(table, id, args...)
+	var zero T
+	if err != nil {
+		return zero, err
+	}
+	if raw == nil {
+		return zero, nil
+	}
+	return raw.(T), nil
 }
