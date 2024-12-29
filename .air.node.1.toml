@@ -22,8 +22,8 @@ poll = false
 poll_interval = 0
 post_cmd = []
 pre_cmd = [
-  "sudo -u mahdi rm -rf /home/mahdi/mount/edge.tartanak.local/root-startier/*",
-  "sudo -u mahdi cp -rf /home/mahdi/Documents/projects/root-startier /home/mahdi/mount/edge.tartanak.local",
+  # "rm -rf /home/mahdi.najafzadeh/mount/edge.tartanak.local/startier/*",
+  # "cp -rf /home/mahdi.najafzadeh/Projects/github.com/startier /home/mahdi.najafzadeh/mount/edge.tartanak.local",
 ]
 rerun = false
 rerun_delay = 500
@@ -38,9 +38,9 @@ runner = "green"
 watcher = "cyan"
 
 [log]
-main_only = false
-silent = false
-time = false
+main_only = true
+silent = true
+time = true
 
 [misc]
 clean_on_exit = false

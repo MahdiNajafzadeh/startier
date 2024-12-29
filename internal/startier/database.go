@@ -1,6 +1,7 @@
 package startier
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -40,7 +41,7 @@ func MonitorDatabase() {
 }
 
 type Address struct {
-	ID        string `gorm:"primaryKey" msgp:"id" json:"-" hash:"-"`
+	ID        string `gorm:"primaryKey" msgp:"id" json:"id" hash:"-"`
 	NodeID    string `gorm:"index:unique_address_idx,unique" msgp:"node_id" json:"node_id"`
 	IPMask    string `gorm:"index:unique_address_idx,unique" msgp:"ip_mask" json:"ip_mask"`
 	HostPort  string `gorm:"index:unique_address_idx,unique" msgp:"host_port" json:"host_port"`
@@ -52,8 +53,13 @@ func (a *Address) ReID() {
 	a.ID = fmt.Sprintf("%d", hash)
 }
 
+func (a *Address) ToJSON() string {
+	b, _ := json.Marshal(a)
+	return string(b)
+}
+
 func (a *Address) BeforeSave(tx *gorm.DB) (err error) {
 	a.ReID()
-	log.Printf("%+v", a)
+	log.Printf("DB::ADDRESS::CREATE::[%+v]", a.ToJSON())
 	return nil
 }

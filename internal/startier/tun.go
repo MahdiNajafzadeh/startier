@@ -64,18 +64,35 @@ func NewTun() (*water.Interface, error) {
 }
 
 func LoopTun(ch chan error) {
+	c := GetReady(GetConfig)
 	tun := GetReady(GetTun)
+	db := GetReady(GetDatabase)
+	network := GetReady(GetNetwork)
+	_, ipnet, _ := net.ParseCIDR(c.Local)
 	buf := make([]byte, 1500)
 	for {
 		n, err := tun.Read(buf)
 		if err != nil {
-			log.Println(err.Error())
 			continue
 		}
-		if !waterutil.IsIPv4(buf[:n]) {
+		if waterutil.IsIPv6(buf[:n]) {
 			continue
 		}
-		// dst := waterutil.IPv4Destination(buf[:n])
-		// log.Println(dst.To4().String())
+		ip := waterutil.IPv4Destination(buf[:n])
+		if !ipnet.Contains(ip) {
+			continue
+		}
+		var addr Address
+		err = db.
+			Where("ip_mask LIKE ?", ip.String()+"%").
+			Where("is_private = ?", true).
+			Find(&addr).
+			Error
+		if err != nil {
+			continue
+		}
+		// ...
+		log.Printf("TUN::PACKET::READ::[%s]:[%s]", addr.NodeID, addr.IPMask)
+
 	}
 }
