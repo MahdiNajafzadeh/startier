@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -34,7 +33,8 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	_config = &config
-	return _config, nil
+	err = _config.ToDatabase()
+	return _config, err
 }
 
 func (c *Config) ToJSON() string {
@@ -43,71 +43,52 @@ func (c *Config) ToJSON() string {
 }
 
 func (c *Config) ToDatabase() error {
-	err := CreateEntry("node", &Node{ID: c.NodeID})
-	if err != nil {
-		return err
-	}
+	db := GetDatabase()
 	_, port, err := net.SplitHostPort(c.Listen)
 	if err != nil {
 		return err
-
-	}
-	nport, err := strconv.Atoi(port)
-	if err != nil {
-		return err
-
 	}
 	iaddrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return err
-
 	}
-	localIP, ipnet, err := net.ParseCIDR(c.Local)
+	lip, lipnet, err := net.ParseCIDR(c.Local)
 	if err != nil {
 		return err
-
 	}
-	if localIP.To4() == nil {
-		return fmt.Errorf("unsupport IPv6 for local : %v", localIP.String())
+	if lip.To4() == nil || lip.IsLoopback() {
+		return fmt.Errorf("unsupported this local ip address : %v", lip.String())
 	}
-	localMask, _ := ipnet.Mask.Size()
-	err = CreateEntry("address",
-		&Address{
-			ID:        uuid.NewString(),
-			NodeID:    c.NodeID,
-			Host:      localIP.To4().String(),
-			Mask:      localMask,
-			Port:      nport,
-			IsPrivate: true,
-		},
-	)
-	if err != nil {
+	lipnet.IP = lip
+	address := Address{
+		ID:        uuid.NewString(),
+		NodeID:    c.NodeID,
+		IPMask:    lipnet.String(),
+		HostPort:  net.JoinHostPort(lip.To4().String(), port),
+		IsPrivate: true,
+	}
+	if err := db.Create(&address).Error; err != nil {
 		return err
-
 	}
+
 	for _, v := range iaddrs {
 		ip, ipnet, err := net.ParseCIDR(v.String())
 		if err != nil {
 			return err
-
 		}
-		if ip.To4() == nil || ip.IsLoopback() || ip.Equal(localIP) {
+		if ip.To4() == nil || ip.IsLoopback() || ip.Equal(lip) {
 			continue
 		}
-		mask, _ := ipnet.Mask.Size()
-		err = CreateEntry("address",
-			&Address{
-				ID:        uuid.NewString(),
-				NodeID:    c.NodeID,
-				Host:      ip.To4().String(),
-				Mask:      mask,
-				Port:      nport,
-				IsPrivate: false,
-			},
-		)
-		if err != nil {
+		ipnet.IP = ip
+		address := Address{
+			ID:        uuid.NewString(),
+			NodeID:    c.NodeID,
+			IPMask:    ipnet.String(),
+			HostPort:  net.JoinHostPort(ip.To4().String(), port),
+			IsPrivate: false,
+		}
+		if err := db.Create(&address).Error; err != nil {
 			return err
-
 		}
 	}
 	return nil

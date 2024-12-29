@@ -14,12 +14,10 @@ func Run(configPath string) error {
 	if err != nil {
 		return err
 	}
-	RunDatabase()
-	c.ToDatabase()
 	log.Printf("CONFIG : %+v", c.ToJSON())
 	ch := make(chan error)
 	defer close(ch)
-	go MonitorDatabase()
+	// go MonitorDatabase()
 	go RunTun(ch)
 	go RunNetwork(ch)
 	go PostRun(ch)
@@ -38,29 +36,25 @@ func GetReady[T any](getter func() T) T {
 }
 
 func PostRun(ch chan error) {
-	c := GetReady(GetConfig)
 	n := GetReady(GetNetwork)
-	txn := GetReady(GetDatabase).Txn(false)
+	c := GetConfig()
+	db := GetDatabase()
+	msg := JoinMessage{Address: []Address{}}
+	addrs := []Address{}
+	db.Find(&addrs)
+	for _, addr := range addrs {
+		msg.Address = append(msg.Address, addr)
+		log.Printf("%+v", addr)
+	}
 	for _, peer := range c.Peers {
 		go func(peer string) {
-			msg := JoinMessage{Node: Node{ID: c.NodeID}, Address: []Address{}}
-			it, err := txn.Get("address", "node_id", c.NodeID)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			for obj := it.Next(); obj != nil; obj = it.Next() {
-				msg.Address = append(msg.Address, *obj.(*Address))
-				log.Printf("address : %+v", *obj.(*Address))
-			}
 			for {
-				err = n.Request(peer, ID_JOIN, &msg)
 				time.Sleep(time.Second)
-				if err != nil {
-					log.Println(err)
-					continue
+				err := n.Server.NewRequest(peer, ID_JOIN, msg)
+				if err == nil {
+					break
 				}
-				break
+				log.Println(err)
 			}
 		}(peer)
 	}

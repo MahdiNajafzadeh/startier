@@ -1,5 +1,5 @@
 {
-    "node_id": "node1",
+    "node_id": "node_1",
     "local": "192.168.100.1/24",
     "listen": ":8080",
     "peers": [
