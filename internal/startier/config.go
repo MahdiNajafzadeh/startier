@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-
-	"github.com/google/uuid"
 )
 
 type Config struct {
@@ -61,7 +59,6 @@ func (c *Config) ToDatabase() error {
 	}
 	lipnet.IP = lip
 	address := Address{
-		ID:        uuid.NewString(),
 		NodeID:    c.NodeID,
 		IPMask:    lipnet.String(),
 		HostPort:  net.JoinHostPort(lip.To4().String(), port),
@@ -81,7 +78,6 @@ func (c *Config) ToDatabase() error {
 		}
 		ipnet.IP = ip
 		address := Address{
-			ID:        uuid.NewString(),
 			NodeID:    c.NodeID,
 			IPMask:    ipnet.String(),
 			HostPort:  net.JoinHostPort(ip.To4().String(), port),

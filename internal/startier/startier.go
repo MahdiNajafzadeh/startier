@@ -17,7 +17,7 @@ func Run(configPath string) error {
 	log.Printf("CONFIG : %+v", c.ToJSON())
 	ch := make(chan error)
 	defer close(ch)
-	// go MonitorDatabase()
+	go MonitorDatabase()
 	go RunTun(ch)
 	go RunNetwork(ch)
 	go PostRun(ch)
@@ -39,11 +39,9 @@ func PostRun(ch chan error) {
 	n := GetReady(GetNetwork)
 	c := GetConfig()
 	db := GetDatabase()
-	msg := JoinMessage{Address: []Address{}}
-	addrs := []Address{}
-	db.Find(&addrs)
-	for _, addr := range addrs {
-		msg.Address = append(msg.Address, addr)
+	msg := JoinMessage{Addresses: []Address{}}
+	db.Find(&msg.Addresses)
+	for _, addr := range msg.Addresses {
 		log.Printf("%+v", addr)
 	}
 	for _, peer := range c.Peers {

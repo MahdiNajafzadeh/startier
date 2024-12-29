@@ -34,6 +34,7 @@ func RunNetwork(ch chan error) {
 
 func NewNetwork() (*Network, error) {
 	db := GetDatabase()
+	c := GetConfig()
 	n := &Network{
 		Sessions: make(map[string]easytcp.Session),
 	}
@@ -52,8 +53,21 @@ func NewNetwork() (*Network, error) {
 	}
 	s.Use(func(next easytcp.HandlerFunc) easytcp.HandlerFunc {
 		return func(ctx easytcp.Context) {
-			log.Printf("USE    : %v : %s => %s", ctx.Session().ID(), ctx.Session().Conn().RemoteAddr().String(), ctx.Session().Conn().LocalAddr().String())
+			log.Printf("USE    : %v : %s => %s", ctx.Session().ID(), ctx.Session().Conn().RemoteAddr(), ctx.Session().Conn().LocalAddr())
 			next(ctx)
+
+		}
+	})
+	s.AddRoute(ID_CONFLICT, func(ctx easytcp.Context) {
+		log.Fatalln("config file is make conflict in network : from ", ctx.Session().Conn().RemoteAddr())
+	})
+	s.AddRoute(ID_INFO, func(ctx easytcp.Context) {
+		var req InfoMessage
+		if err := ctx.Bind(&req); err != nil {
+			return
+		}
+		for _, v := range req.Addresses {
+			db.FirstOrCreate(&v)
 		}
 	})
 	s.AddRoute(ID_JOIN, func(ctx easytcp.Context) {
@@ -61,28 +75,38 @@ func NewNetwork() (*Network, error) {
 		if err := ctx.Bind(&req); err != nil {
 			return
 		}
-
-		db := GetDatabase()
-		var existingAddresses []Address
-		db.Find(&existingAddresses)
-
-		var matchedAddress *Address
-		for _, addr := range existingAddresses {
-			if addr.NodeID != req.Address[0].NodeID && addr.Host == req.Address[0].Host && addr.Port == req.Address[0].Port {
-				matchedAddress = &addr
-				break
+		if len(req.Addresses) == 0 {
+			return
+		}
+		var nodeID string
+		addrs := []Address{}
+		for _, v := range req.Addresses {
+			if v.NodeID == c.NodeID {
+				ctx.SetResponse(ID_CONFLICT, 0)
+				return
+			}
+			nodeID = v.NodeID
+			v.ReID()
+			var count int64
+			db.Model(&Address{}).Where(&v).Count(&count)
+			if count == 0 {
+				addrs = append(addrs, v)
+				db.Create(&v)
 			}
 		}
-
-		if matchedAddress != nil {
-			go ctx.SetResponse(ID_INFO, &InfoMessage{Address: existingAddresses})
-		}
-
-		for _, sess := range n.Sessions {
-			if sess.ID() != ctx.Session().ID() {
-				ctx.SetResponse(ID_JOIN_CAST, req)
+		if len(addrs) != 0 {
+			for _, sess := range n.Sessions {
+				if sess.ID() != ctx.Session().ID() {
+					err := sess.AllocateContext().SetResponse(ID_JOIN_CAST, addrs)
+					if err != nil {
+						log.Println(err)
+					}
+				}
 			}
 		}
+		addrs = []Address{}
+		db.Where("node_id != ?", nodeID).Find(&addrs)
+		ctx.SetResponse(ID_INFO, InfoMessage{Addresses: addrs})
 	})
 	s.NotFoundHandler(func(ctx easytcp.Context) {
 		log.Printf("NOT FOUND : %v", ctx.Session().Conn().RemoteAddr().String())
