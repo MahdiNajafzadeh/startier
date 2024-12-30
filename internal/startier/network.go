@@ -2,7 +2,6 @@ package startier
 
 import (
 	"log"
-	"net"
 	"startier/internal/easytcp"
 )
 
@@ -36,28 +35,27 @@ func RunNetwork(ch chan error) {
 func NewNetwork() (*Network, error) {
 	db := GetDatabase()
 	c := GetConfig()
-	tun := GetTun()
 	n := &Network{
 		Sessions: make(map[string]easytcp.Session),
 	}
 	s := easytcp.NewServer(&easytcp.ServerOption{
-		Packer:           easytcp.NewDefaultPacker(),
-		Codec:            &easytcp.MsgpackCodec{},
-		AsyncRouter:      true,
-		DoNotPrintRoutes: true,
+		Packer:      easytcp.NewDefaultPacker(),
+		Codec:       &easytcp.MsgpackCodec{},
+		AsyncRouter: false,
 	})
 	s.OnSessionCreate = func(sess easytcp.Session) {
-		log.Printf("SESSION::CREATE::[%v]:[%s]=>[%s]", sess.ID(), sess.Conn().RemoteAddr(), sess.Conn().LocalAddr())
+		log.Printf("CREATE : %v : %s => %s", sess.ID(), sess.Conn().RemoteAddr(), sess.Conn().LocalAddr())
 		n.Sessions[sess.ID().(string)] = sess
 	}
 	s.OnSessionClose = func(sess easytcp.Session) {
-		log.Printf("SESSION::CLOSE::[%v]:[%s]=>[%s]", sess.ID(), sess.Conn().RemoteAddr(), sess.Conn().LocalAddr())
+		log.Printf("CLOSE  : %v : %s => %s", sess.ID(), sess.Conn().RemoteAddr(), sess.Conn().LocalAddr())
 		delete(n.Sessions, sess.ID().(string))
 	}
 	s.Use(func(next easytcp.HandlerFunc) easytcp.HandlerFunc {
 		return func(ctx easytcp.Context) {
-			log.Printf("HANDLE::USE::[%v]:[%s]=>[%s]", ctx.Session().ID(), ctx.Session().Conn().RemoteAddr(), ctx.Session().Conn().LocalAddr())
+			log.Printf("USE    : %v : %s => %s", ctx.Session().ID(), ctx.Session().Conn().RemoteAddr(), ctx.Session().Conn().LocalAddr())
 			next(ctx)
+
 		}
 	})
 	s.AddRoute(ID_CONFLICT, func(ctx easytcp.Context) {
@@ -97,12 +95,9 @@ func NewNetwork() (*Network, error) {
 			}
 		}
 		if len(addrs) != 0 {
-			targetHost, _, _ := net.SplitHostPort(ctx.Session().Conn().RemoteAddr().String())
 			for _, sess := range n.Sessions {
-				sessHost, _, _ := net.SplitHostPort(sess.Conn().RemoteAddr().String())
-				if targetHost != sessHost {
-					log.Println(sessHost)
-					err := sess.AllocateContext().SetResponse(ID_INFO, &addrs)
+				if sess.ID() != ctx.Session().ID() {
+					err := sess.AllocateContext().SetResponse(ID_JOIN_CAST, addrs)
 					if err != nil {
 						log.Println(err)
 					}
@@ -111,20 +106,10 @@ func NewNetwork() (*Network, error) {
 		}
 		addrs = []Address{}
 		db.Where("node_id != ?", nodeID).Find(&addrs)
-		ctx.SetResponse(ID_INFO, &InfoMessage{Addresses: addrs})
-	})
-	s.AddRoute(ID_PACKET, func(ctx easytcp.Context) {
-		var req PacketMessage
-		if err := ctx.Bind(&req); err != nil {
-			return
-		}
-		_, err := tun.Write(req.Payload)
-		if err != nil {
-			log.Printf("TUN::PACKET::WRITE::ERR::[%s]", err.Error())
-		}
+		ctx.SetResponse(ID_INFO, InfoMessage{Addresses: addrs})
 	})
 	s.NotFoundHandler(func(ctx easytcp.Context) {
-		log.Printf("HANDLE::NOT_FOUND::[%v]:[%s]=>[%s]", ctx.Session().ID(), ctx.Session().Conn().RemoteAddr(), ctx.Session().Conn().LocalAddr())
+		log.Printf("NOT FOUND : %s", ctx.Session().Conn().RemoteAddr())
 	})
 	n.Server = s
 	return n, nil

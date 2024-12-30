@@ -8,16 +8,16 @@ import (
 )
 
 func Run(configPath string) error {
-	log.Printf("APP::PPID[%d]", os.Getppid())
-	log.Printf("APP::PID[%d]", os.Getpid())
+	log.Printf("PPID : %d", os.Getppid())
+	log.Printf("PID  : %d", os.Getpid())
 	c, err := LoadConfig(configPath)
 	if err != nil {
 		return err
 	}
-	log.Printf("APP::CONFIG::[%s]", c.ToJSON())
+	log.Printf("CONFIG : %+v", c.ToJSON())
 	ch := make(chan error)
 	defer close(ch)
-	// go MonitorDatabase()
+	go MonitorDatabase()
 	go RunTun(ch)
 	go RunNetwork(ch)
 	go PostRun(ch)
@@ -41,6 +41,9 @@ func PostRun(ch chan error) {
 	db := GetDatabase()
 	msg := JoinMessage{Addresses: []Address{}}
 	db.Find(&msg.Addresses)
+	for _, addr := range msg.Addresses {
+		log.Printf("%+v", addr)
+	}
 	for _, peer := range c.Peers {
 		go func(peer string) {
 			for {

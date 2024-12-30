@@ -11,7 +11,7 @@ import (
 	"net"
 )
 
-func (s *Server) AddConnection(conn net.Conn) {
+func (s *Server) AppendConn(conn net.Conn) {
 	go s.handleConn(conn)
 }
 
@@ -32,10 +32,10 @@ func (s *Server) NewRequest(address string, id interface{}, v interface{}) error
 	if err != nil {
 		return err
 	}
-	s.AddConnection(conn)
+	s.AppendConn(conn)
 	return nil
 }
 
-func (s *Server) TunnelConnection(from, to Session) {
+func (s *Server) Tunnel(from, to Session) {
 	io.Copy(to.Conn(), from.Conn())
 }

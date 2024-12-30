@@ -15,9 +15,6 @@ type JoinMessage struct {
 type InfoMessage struct {
 	Addresses []Address `msgp:"addresses"`
 }
-type JoinCastMessage struct {
-	Addresses []Address `msgp:"addresses"`
-}
 type PacketMessage struct {
 	Payload []byte `msgp:"payload"`
 }
