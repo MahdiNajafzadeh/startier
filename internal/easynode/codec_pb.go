@@ -1,7 +1,8 @@
-package easytcp
+package easynode
 
 import (
 	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 

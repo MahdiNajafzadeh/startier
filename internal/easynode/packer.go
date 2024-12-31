@@ -1,13 +1,14 @@
-package easytcp
+package easynode
 
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/spf13/cast"
 	"io"
+
+	"github.com/spf13/cast"
 )
 
-//go:generate mockgen -destination ./packer_mock.go -package easytcp . Packer
+//go:generate mockgen -destination ./packer_mock.go -package easynode . Packer
 
 // Packer is a generic interface to pack and unpack message packet.
 type Packer interface {
@@ -37,6 +38,7 @@ func NewDefaultPacker() *DefaultPacker {
 // | ---------- | ------ | ------- | ----------------------- |
 // | `dataSize` | uint32 | 4       | the size of `data` only |
 // | `id`       | uint32 | 4       |                         |
+// | `nodeID`   | uint32 | 4       |                         |
 // | `data`     | []byte | dynamic |                         |
 // .
 type DefaultPacker struct {
@@ -54,14 +56,19 @@ func (d *DefaultPacker) Pack(msg *Message) ([]byte, error) {
 	if d.MaxDataSize > 0 && dataSize > d.MaxDataSize {
 		return nil, fmt.Errorf("the dataSize %d is beyond the max: %d", dataSize, d.MaxDataSize)
 	}
-	buffer := make([]byte, 4+4+dataSize)
+	buffer := make([]byte, 4+4+4+dataSize)
 	d.bytesOrder().PutUint32(buffer[:4], uint32(dataSize)) // write dataSize
 	id, err := cast.ToUint32E(msg.ID())
 	if err != nil {
 		return nil, fmt.Errorf("invalid type of msg.ID: %s", err)
 	}
-	d.bytesOrder().PutUint32(buffer[4:8], id) // write id
-	copy(buffer[8:], msg.Data())              // write data
+	nodeID, err := cast.ToUint32E(msg.NodeID())
+	if err != nil {
+		return nil, fmt.Errorf("invalid type of msg.ID: %s", err)
+	}
+	d.bytesOrder().PutUint32(buffer[4:8], id)      // write id
+	d.bytesOrder().PutUint32(buffer[8:12], nodeID) // write nodeID
+	copy(buffer[12:], msg.Data())                  // write data
 	return buffer, nil
 }
 
@@ -69,7 +76,7 @@ func (d *DefaultPacker) Pack(msg *Message) ([]byte, error) {
 // Unpack returns the message whose ID is type of int.
 // So we need use int id to register routes.
 func (d *DefaultPacker) Unpack(reader io.Reader) (*Message, error) {
-	headerBuffer := make([]byte, 4+4)
+	headerBuffer := make([]byte, 4+4+4)
 	if _, err := io.ReadFull(reader, headerBuffer); err != nil {
 		if err == io.EOF {
 			return nil, err
@@ -81,6 +88,7 @@ func (d *DefaultPacker) Unpack(reader io.Reader) (*Message, error) {
 		return nil, fmt.Errorf("the dataSize %d is beyond the max: %d", dataSize, d.MaxDataSize)
 	}
 	id := d.bytesOrder().Uint32(headerBuffer[4:8])
+	nodeID := d.bytesOrder().Uint32(headerBuffer[8:12])
 	data := make([]byte, dataSize)
 	if _, err := io.ReadFull(reader, data); err != nil {
 		if err == io.EOF {
@@ -88,5 +96,5 @@ func (d *DefaultPacker) Unpack(reader io.Reader) (*Message, error) {
 		}
 		return nil, fmt.Errorf("read data err: %s", err)
 	}
-	return NewMessage(int(id), data), nil
+	return NewMessage(int(id), nodeID, data), nil
 }

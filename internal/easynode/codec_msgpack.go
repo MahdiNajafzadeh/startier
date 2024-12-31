@@ -1,4 +1,4 @@
-package easytcp
+package easynode
 
 import (
 	"github.com/vmihailenco/msgpack/v5"

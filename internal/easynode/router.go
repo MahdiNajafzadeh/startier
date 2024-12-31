@@ -1,15 +1,16 @@
-package easytcp
+package easynode
 
 import (
 	"fmt"
-	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cast"
 	"io"
 	"os"
 	"reflect"
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/olekukonko/tablewriter"
+	"github.com/spf13/cast"
 )
 
 func newRouter() *Router {

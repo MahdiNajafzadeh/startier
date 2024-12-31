@@ -1,7 +1,7 @@
 //go:build !jsoniter
 // +build !jsoniter
 
-package easytcp
+package easynode
 
 import (
 	"encoding/json"

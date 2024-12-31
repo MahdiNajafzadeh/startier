@@ -1,18 +1,22 @@
-package easytcp
+package easynode
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Session represents a TCP session.
 type Session interface {
 	// ID returns current session's id.
 	ID() interface{}
+
+	// NodeID returns current session's nodeID.
+	NodeID() interface{}
 
 	// SetID sets current session's id.
 	SetID(id interface{})
@@ -41,6 +45,7 @@ type Session interface {
 
 type session struct {
 	id               interface{}   // session's ID.
+	nodeID           interface{}   // session's NodeID.
 	conn             net.Conn      // tcp connection
 	closedC          chan struct{} // to close when read/write loop stopped
 	closeOnce        sync.Once     // ensure one session only close once
@@ -83,6 +88,11 @@ func newSession(conn net.Conn, opt *sessionOption) *session {
 // ID returns the session's id.
 func (s *session) ID() interface{} {
 	return s.id
+}
+
+// NodeID returns the session's nodeID.
+func (s *session) NodeID() interface{} {
+	return s.nodeID
 }
 
 // SetID sets session id.
@@ -167,7 +177,12 @@ func (s *session) readInbound(router *Router, timeout time.Duration) {
 		if reqMsg == nil {
 			continue
 		}
-
+		if reqMsg.nodeID == nil {
+			continue
+		}
+		if s.nodeID == nil {
+			s.nodeID = reqMsg.nodeID
+		}
 		if s.asyncRouter {
 			go s.handleReq(router, reqMsg)
 		} else {

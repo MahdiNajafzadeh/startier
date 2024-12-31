@@ -1,10 +1,12 @@
-package easytcp
+package easynode
 
 import (
 	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 //go:generate mockgen -destination internal/mock/server_mock.go -package mock net Listener,Error,Conn
@@ -25,6 +27,9 @@ type Server struct {
 	// OnSessionClose is an event hook, will be invoked when session's closed.
 	OnSessionClose func(sess Session)
 
+	// NodeID is unique id between nodes
+	NodeID interface{}
+
 	socketReadBufferSize  int
 	socketWriteBufferSize int
 	socketSendDelay       bool
@@ -40,6 +45,7 @@ type Server struct {
 
 // ServerOption is the option for Server.
 type ServerOption struct {
+	NodeID                interface{}   // Unique ID for Node (deafult set UUID as NodeID)
 	SocketReadBufferSize  int           // sets the socket read buffer size.
 	SocketWriteBufferSize int           // sets the socket write buffer size.
 	SocketSendDelay       bool          // sets the socket delay or not.
@@ -67,6 +73,9 @@ func NewServer(opt *ServerOption) *Server {
 	}
 	if opt.RespQueueSize < 0 {
 		opt.RespQueueSize = DefaultRespQueueSize
+	}
+	if opt.NodeID == nil {
+		opt.NodeID = uuid.NewString()
 	}
 	return &Server{
 		socketReadBufferSize:  opt.SocketReadBufferSize,

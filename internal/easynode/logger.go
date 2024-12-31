@@ -1,4 +1,4 @@
-package easytcp
+package easynode
 
 import (
 	"fmt"
@@ -19,7 +19,7 @@ type Logger interface {
 
 func newDiscardLogger() *DefaultLogger {
 	return &DefaultLogger{
-		rawLogger: log.New(io.Discard, "easytcp", log.LstdFlags),
+		rawLogger: log.New(io.Discard, "easynode", log.LstdFlags),
 	}
 }
 

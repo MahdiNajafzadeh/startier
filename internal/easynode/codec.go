@@ -1,4 +1,4 @@
-package easytcp
+package easynode
 
 //go:generate mockgen -destination internal/mock/codec_mock.go -package mock . Codec
 

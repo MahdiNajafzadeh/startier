@@ -3,7 +3,8 @@ package main
 import (
 	"flag"
 	"log"
-	"startier/internal/startier"
+
+	"github.com/MahdiNajafzadeh/easynode/internal/easynode"
 )
 
 var configPath string
@@ -14,5 +15,5 @@ func init() {
 }
 
 func main() {
-	log.Fatal(startier.Run(configPath))
+	log.Fatal(easynode.Run(configPath))
 }

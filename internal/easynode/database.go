@@ -1,9 +1,7 @@
-package startier
+package easynode
 
 import (
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"gorm.io/driver/sqlite"
@@ -13,30 +11,17 @@ import (
 var _db *gorm.DB
 
 func init() {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("file::memory:?mode=memory&cache=shared&_fk=1"), &gorm.Config{})
 	if err != nil {
+		_log.Errorf("database error in init : %s", err)
+		panic(err)
+	}
+	err = db.AutoMigrate(&Address{})
+	if err != nil {
+		_log.Errorf("database error in migration : %s", err)
 		panic(err)
 	}
 	_db = db
-	_db.AutoMigrate(&Address{})
-}
-
-func GetDatabase() *gorm.DB {
-	return _db
-}
-
-func MonitorDatabase() {
-	db := GetDatabase()
-	for {
-		time.Sleep(time.Second * 5)
-		var addrs []Address
-		db.Find(&addrs)
-		fmt.Println("===")
-		for _, v := range addrs {
-			fmt.Printf("%+v\n", v)
-		}
-		fmt.Println("===")
-	}
 }
 
 type Address struct {
@@ -47,13 +32,12 @@ type Address struct {
 	IsPrivate bool   `gorm:"index:unique_address_idx,unique" msgp:"is_private" json:"is_private"`
 }
 
-func (a *Address) ReID() {
-	hash, _ := hashstructure.Hash(a, hashstructure.FormatV2, nil)
+func (a *Address) BeforeSave(tx *gorm.DB) error {
+	hash, err := hashstructure.Hash(a, hashstructure.FormatV2, nil)
+	if err != nil {
+		_log.Errorf("database error in calculate address id hash : %s", err)
+		return err
+	}
 	a.ID = fmt.Sprintf("%d", hash)
-}
-
-func (a *Address) BeforeSave(tx *gorm.DB) (err error) {
-	a.ReID()
-	log.Printf("%+v", a)
 	return nil
 }
