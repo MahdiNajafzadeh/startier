@@ -145,7 +145,7 @@ func (c *routeContext) SetRequest(id, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	c.reqMsg = NewMessage(id, c.session.NodeID(), dataBytes)
+	c.reqMsg = NewMessage(id, dataBytes)
 	return nil
 }
 
@@ -186,7 +186,7 @@ func (c *routeContext) SetResponse(id, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	c.respMsg = NewMessage(id, c.session.NodeID(), dataBytes)
+	c.respMsg = NewMessage(id, dataBytes)
 	return nil
 }
 

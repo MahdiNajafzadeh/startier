@@ -3,11 +3,8 @@ package easynode
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
-
-	"github.com/google/uuid"
 )
 
 type Config struct {
@@ -19,39 +16,29 @@ type Config struct {
 
 var _config *Config
 
-func init() {
-	_config = &Config{
-		NodeID: uuid.NewString(),
-		Local:  fmt.Sprintf("192.168.100.%d/24", rand.Intn(253)+1),
-		Listen: ":5555",
-		Peers:  []string{},
-	}
-}
-
 func LoadConfig(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if err := json.NewDecoder(file).Decode(_config); err != nil {
+	var config Config
+	if err := json.NewDecoder(file).Decode(&config); err != nil {
 		return err
 	}
+	_config = &config
 	err = _config.LoadDatabase()
 	return err
 }
 
 func (c *Config) LoadDatabase() error {
-	var err error
-	err = c.LoadPrivateAddress()
-	if err != nil {
+	if err := c.LoadPrivateAddress(); err != nil {
 		return err
 	}
-	err = c.LoadPublicAddress()
-	if err != nil {
+	if err := c.LoadPublicAddress(); err != nil {
 		return err
 	}
-	return err
+	return nil
 }
 
 func (c *Config) LoadPrivateAddress() error {
@@ -59,17 +46,18 @@ func (c *Config) LoadPrivateAddress() error {
 	if err != nil {
 		return err
 	}
-	ip, _, err := net.ParseCIDR(c.Local)
+	ip, ipnet, err := net.ParseCIDR(c.Local)
 	if err != nil {
 		return err
 	}
-	if ip.To4() == nil {
+	if ip.To4() == nil || ip.IsLoopback() {
 		return fmt.Errorf("not support IPv6 for local address : %s", ip.String())
 	}
+	ipnet.IP = ip
 	Load(_db)
 	err = _db.Create(&Address{
 		NodeID:    c.NodeID,
-		IPMask:    ip.String(),
+		IPMask:    ipnet.String(),
 		HostPort:  net.JoinHostPort(ip.String(), port),
 		IsPrivate: true,
 	}).Error
@@ -78,23 +66,24 @@ func (c *Config) LoadPrivateAddress() error {
 
 func (c *Config) LoadPublicAddress() error {
 	_, port, _ := net.SplitHostPort(c.Listen)
-	lip, _, _ := net.ParseCIDR(c.Local)
+	localIP, _, _ := net.ParseCIDR(c.Local)
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return err
 	}
 	for _, v := range addrs {
-		ip, _, err := net.ParseCIDR(v.String())
+		ip, ipnet, err := net.ParseCIDR(v.String())
 		if err != nil {
 			return err
 		}
-		if ip.To4() == nil || ip.IsLoopback() || lip.Equal(ip) {
+		if ip.To4() == nil || ip.IsLoopback() || localIP.Equal(ip) {
 			continue
 		}
+		ipnet.IP = ip 
 		Load(_db)
 		err = _db.Create(&Address{
 			NodeID:   _config.NodeID,
-			IPMask:   ip.To4().String(),
+			IPMask:   ipnet.String(),
 			HostPort: net.JoinHostPort(ip.To4().String(), port),
 		}).Error
 		if err != nil {
@@ -102,4 +91,9 @@ func (c *Config) LoadPublicAddress() error {
 		}
 	}
 	return nil
+}
+
+func (c *Config) ToJSON() string {
+	b, _ := json.Marshal(c)
+	return string(b)
 }

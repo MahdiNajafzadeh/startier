@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,9 +28,6 @@ type Server struct {
 	// OnSessionClose is an event hook, will be invoked when session's closed.
 	OnSessionClose func(sess Session)
 
-	// NodeID is unique id between nodes
-	NodeID interface{}
-
 	socketReadBufferSize  int
 	socketWriteBufferSize int
 	socketSendDelay       bool
@@ -41,6 +39,15 @@ type Server struct {
 	acceptingC            chan struct{}
 	stoppedC              chan struct{}
 	asyncRouter           bool
+	// TLS config
+	tls       bool
+	tlsConfig *tls.Config
+	// Pool Sessions
+	sessions   map[interface{}]Session
+	sessionsMu sync.RWMutex
+	// Pool Tunnels
+	tunnels   map[interface{}]Tunnel
+	tunnelsMu sync.RWMutex
 }
 
 // ServerOption is the option for Server.
@@ -91,6 +98,12 @@ func NewServer(opt *ServerOption) *Server {
 		acceptingC:            make(chan struct{}),
 		stoppedC:              make(chan struct{}),
 		asyncRouter:           opt.AsyncRouter,
+		tls:                   false,
+		tlsConfig:             nil,
+		sessions:              make(map[interface{}]Session),
+		sessionsMu:            sync.RWMutex{},
+		tunnels:               make(map[interface{}]Tunnel),
+		tunnelsMu:             sync.RWMutex{},
 	}
 }
 
@@ -119,6 +132,8 @@ func (s *Server) RunTLS(addr string, config *tls.Config) error {
 	if err != nil {
 		return err
 	}
+	s.tls = true
+	s.tlsConfig = config
 	return s.Serve(lis)
 }
 
@@ -128,14 +143,14 @@ func (s *Server) acceptLoop() error {
 	close(s.acceptingC)
 	for {
 		if s.isStopped() {
-			_log.Tracef("server accept loop stopped")
+			_log.Debugf("server accept loop stopped")
 			return ErrServerStopped
 		}
 
 		conn, err := s.Listener.Accept()
 		if err != nil {
 			if s.isStopped() {
-				_log.Tracef("server accept loop stopped")
+				_log.Debugf("server accept loop stopped")
 				return ErrServerStopped
 			}
 			return fmt.Errorf("accept err: %s", err)
@@ -177,6 +192,11 @@ func (s *Server) handleConn(conn net.Conn) {
 		respQueueSize: s.respQueueSize,
 		asyncRouter:   s.asyncRouter,
 	})
+
+	s.sessionsMu.Lock()
+	s.sessions[sess.id] = sess
+	s.sessionsMu.Unlock()
+
 	if s.OnSessionCreate != nil {
 		s.OnSessionCreate(sess)
 	}
@@ -189,6 +209,10 @@ func (s *Server) handleConn(conn net.Conn) {
 	case <-sess.closedC: // wait for session finished.
 	case <-s.stoppedC: // or the server is stopped.
 	}
+
+	s.sessionsMu.Lock()
+	delete(s.sessions, sess.id)
+	s.sessionsMu.Unlock()
 
 	if s.OnSessionClose != nil {
 		s.OnSessionClose(sess)
@@ -224,4 +248,46 @@ func (s *Server) isStopped() bool {
 	default:
 		return false
 	}
+}
+
+func (s *Server) Request(addr string, id interface{}, v interface{}) error {
+	var conn net.Conn
+	var err error
+	if s.tls {
+		conn, err = tls.Dial("tcp", addr, s.tlsConfig)
+	} else {
+		conn, err = net.Dial("tcp", addr)
+	}
+	if err != nil {
+		return err
+	}
+	data, err := s.Codec.Encode(v)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	packet, err := s.Packer.Pack(NewMessage(id, data))
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	_, err = conn.Write(packet)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	go s.handleConn(conn)
+	return nil
+}
+
+func (s *Server) Sessions() map[interface{}]Session {
+	s.sessionsMu.RLock()
+	defer s.sessionsMu.RUnlock()
+	return s.sessions
+}
+
+func (s *Server) Tunnels() map[interface{}]Tunnel {
+	s.tunnelsMu.RLock()
+	defer s.tunnelsMu.RUnlock()
+	return s.tunnels
 }

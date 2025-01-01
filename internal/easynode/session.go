@@ -1,7 +1,6 @@
 package easynode
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -14,9 +13,6 @@ import (
 type Session interface {
 	// ID returns current session's id.
 	ID() interface{}
-
-	// NodeID returns current session's nodeID.
-	NodeID() interface{}
 
 	// SetID sets current session's id.
 	SetID(id interface{})
@@ -41,11 +37,14 @@ type Session interface {
 
 	// AfterCloseHook blocks until session's on-close hook triggered.
 	AfterCloseHook() <-chan struct{}
+
+	// Key/Value Store
+	Get(key string) interface{}
+	Set(key string, value interface{})
 }
 
 type session struct {
 	id               interface{}   // session's ID.
-	nodeID           interface{}   // session's NodeID.
 	conn             net.Conn      // tcp connection
 	closedC          chan struct{} // to close when read/write loop stopped
 	closeOnce        sync.Once     // ensure one session only close once
@@ -56,6 +55,8 @@ type session struct {
 	codec            Codec         // encode/decode message data
 	ctxPool          sync.Pool     // router context pool
 	asyncRouter      bool          // calls router HandlerFunc in a goroutine if false
+	storeMu          sync.RWMutex
+	store            map[string]interface{}
 }
 
 // sessionOption is the extra options for session.
@@ -82,17 +83,14 @@ func newSession(conn net.Conn, opt *sessionOption) *session {
 		codec:            opt.Codec,
 		ctxPool:          sync.Pool{New: func() interface{} { return newContext() }},
 		asyncRouter:      opt.asyncRouter,
+		store:            make(map[string]interface{}),
+		storeMu:          sync.RWMutex{},
 	}
 }
 
 // ID returns the session's id.
 func (s *session) ID() interface{} {
 	return s.id
-}
-
-// NodeID returns the session's nodeID.
-func (s *session) NodeID() interface{} {
-	return s.nodeID
 }
 
 // SetID sets session id.
@@ -166,22 +164,15 @@ func (s *session) readInbound(router *Router, timeout time.Duration) {
 		}
 		reqMsg, err := s.packer.Unpack(s.conn)
 		if err != nil {
-			logMsg := fmt.Sprintf("session %s unpack inbound packet err: %s", s.id, err)
 			if err == io.EOF {
-				_log.Tracef(logMsg)
+				_log.Debugf("session %s unpack inbound packet err: %s", s.id, err)
 			} else {
-				_log.Errorf(logMsg)
+				_log.Errorf("session %s unpack inbound packet err: %s", s.id, err)
 			}
 			break
 		}
 		if reqMsg == nil {
 			continue
-		}
-		if reqMsg.nodeID == nil {
-			continue
-		}
-		if s.nodeID == nil {
-			s.nodeID = reqMsg.nodeID
 		}
 		if s.asyncRouter {
 			go s.handleReq(router, reqMsg)
@@ -189,7 +180,7 @@ func (s *session) readInbound(router *Router, timeout time.Duration) {
 			s.handleReq(router, reqMsg)
 		}
 	}
-	_log.Tracef("session %s readInbound exit because of error", s.id)
+	_log.Debugf("session %s readInbound exit because of error", s.id)
 	s.Close()
 }
 
@@ -228,12 +219,12 @@ func (s *session) writeOutbound(writeTimeout time.Duration) {
 		}
 
 		if _, err := s.conn.Write(outboundBytes); err != nil {
-			_log.Errorf("session %s conn write err: %s", s.id, err)
+			// _log.Errorf("session %s conn write err: %s", s.id, err)
 			break
 		}
 	}
 	s.Close()
-	_log.Tracef("session %s writeOutbound exit because of error", s.id)
+	_log.Debugf("session %s writeOutbound exit because of error", s.id)
 }
 
 func (s *session) packResponse(ctx Context) ([]byte, error) {
@@ -242,4 +233,16 @@ func (s *session) packResponse(ctx Context) ([]byte, error) {
 		return nil, nil
 	}
 	return s.packer.Pack(ctx.Response())
+}
+
+func (s *session) Get(key string) interface{} {
+	s.storeMu.RLock()
+	defer s.storeMu.RUnlock()
+	return s.store[key]
+}
+
+func (s *session) Set(key string, value interface{}) {
+	s.storeMu.Lock()
+	defer s.storeMu.Unlock()
+	s.store[key] = value
 }

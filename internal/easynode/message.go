@@ -6,18 +6,16 @@ import (
 )
 
 // NewMessage creates a Message pointer.
-func NewMessage(id interface{}, nodeID interface{}, data []byte) *Message {
+func NewMessage(id interface{}, data []byte) *Message {
 	return &Message{
-		id:     id,
-		nodeID: nodeID,
-		data:   data,
+		id:   id,
+		data: data,
 	}
 }
 
 // Message is the abstract of inbound and outbound message.
 type Message struct {
 	id      interface{}
-	nodeID  interface{}
 	data    []byte
 	storage map[string]interface{}
 	mu      sync.RWMutex
@@ -26,11 +24,6 @@ type Message struct {
 // ID returns the id of current message.
 func (m *Message) ID() interface{} {
 	return m.id
-}
-
-// NodeID returns the nodeID of current message.
-func (m *Message) NodeID() interface{} {
-	return m.nodeID
 }
 
 // Data returns the data part of current message.

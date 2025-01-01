@@ -1,50 +1,36 @@
 package easynode
 
 import (
-	"fmt"
-	"io"
-	"log"
+	"os"
+	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-var _ Logger = &DefaultLogger{}
+var _log *zap.SugaredLogger
 
-// _log is the instance of Logger interface.
-var _log Logger = newDiscardLogger()
-
-// Logger is the generic interface for log recording.
-type Logger interface {
-	Errorf(format string, args ...interface{})
-	Tracef(format string, args ...interface{})
+func init() {
+	_log = NewCustomLogger()
 }
 
-func newDiscardLogger() *DefaultLogger {
-	return &DefaultLogger{
-		rawLogger: log.New(io.Discard, "easynode", log.LstdFlags),
+func NewCustomLogger() *zap.SugaredLogger {
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:    "time",
+		LevelKey:   "level",
+		MessageKey: "msg",
+		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(t.Format("2006/01/02 15:04:05"))
+		},
+		EncodeLevel:      func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(level.CapitalString()) },
+		EncodeDuration:   zapcore.StringDurationEncoder,
+		EncodeCaller:     zapcore.ShortCallerEncoder,
+		ConsoleSeparator: " . ",
 	}
-}
-
-// DefaultLogger is the default logger instance for this package.
-// DefaultLogger uses the built-in log.Logger.
-type DefaultLogger struct {
-	rawLogger *log.Logger
-}
-
-// Errorf implements Logger Errorf method.
-func (d *DefaultLogger) Errorf(format string, args ...interface{}) {
-	d.rawLogger.Printf("[ERROR] %s", fmt.Sprintf(format, args...))
-}
-
-// Tracef implements Logger Tracef method.
-func (d *DefaultLogger) Tracef(format string, args ...interface{}) {
-	d.rawLogger.Printf("[TRACE] %s", fmt.Sprintf(format, args...))
-}
-
-// Log returns the package logger.
-func Log() Logger {
-	return _log
-}
-
-// SetLogger sets the package logger.
-func SetLogger(lg Logger) {
-	_log = lg
+	return zap.New(
+		zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			os.Stdout,
+			zapcore.DebugLevel,
+		)).Sugar()
 }

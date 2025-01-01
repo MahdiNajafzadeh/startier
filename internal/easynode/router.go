@@ -125,7 +125,7 @@ func (r *Router) registerMiddleware(m ...MiddlewareFunc) {
 func (r *Router) printHandlers(addr string) {
 	var w io.Writer = os.Stdout
 
-	_, _ = fmt.Fprintf(w, "\n[EASYTCP] Message-Route Table:\n")
+	_, _ = fmt.Fprintf(w, "\n[EASYNODE] Message-Route Table:\n")
 	table := tablewriter.NewWriter(w)
 	table.SetHeader([]string{"Message ID", "Route Handler", "Middleware"})
 	table.SetAutoFormatHeaders(false) // don't uppercase the header
@@ -166,7 +166,7 @@ func (r *Router) printHandlers(addr string) {
 	}
 
 	table.Render()
-	_, _ = fmt.Fprintf(w, "[EASYTCP] Serving at: %s\n\n", addr)
+	_, _ = fmt.Fprintf(w, "[EASYNODE] Serving at: %s\n\n", addr)
 }
 
 func (r *Router) setNotFoundHandler(handler HandlerFunc) {
