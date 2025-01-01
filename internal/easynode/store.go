@@ -4,16 +4,17 @@ var _store *Store
 
 type Store struct {
 	session SessionStore
-	tunnel  TunnelStore
+	// tunnel  TunnelStore
+	nodes map[string]struct{}
 }
 type SessionStore struct {
 	node_to_session map[string]Session
 	session_to_node map[string]Session
 }
-type TunnelStore struct {
-	node_to_tunnel    map[string]Tunnel
-	session_to_tunnel map[string]Tunnel
-}
+// type TunnelStore struct {
+// 	node_to_tunnel    map[string]Tunnel
+// 	session_to_tunnel map[string]Tunnel
+// }
 
 func init() {
 	_store = &Store{
@@ -21,9 +22,9 @@ func init() {
 			node_to_session: map[string]Session{},
 			session_to_node: map[string]Session{},
 		},
-		tunnel: TunnelStore{
-			node_to_tunnel:    map[string]Tunnel{},
-			session_to_tunnel: map[string]Tunnel{},
-		},
+		// tunnel: TunnelStore{
+		// 	node_to_tunnel:    map[string]Tunnel{},
+		// 	session_to_tunnel: map[string]Tunnel{},
+		// },
 	}
 }

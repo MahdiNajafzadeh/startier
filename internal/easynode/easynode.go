@@ -50,7 +50,10 @@ func runPostRun(ch chan<- error) {
 	Load(_server)
 	var err error
 	var addrs []Address
-	err = _db.Model(&Address{}).Where("node_id = ?", _config.NodeID).Find(&addrs).Error
+	err = _db.
+		Model(&Address{}).
+		Where("node_id = ?", _config.NodeID).
+		Find(&addrs).Error
 	if err != nil {
 		ch <- err
 		return
@@ -63,7 +66,7 @@ func runPostRun(ch chan<- error) {
 				err := _server.Request(addr, ID_JOIN, _join_msg)
 				if err != nil {
 					_log.Errorf("CONNECT PEER ERROR %s", err.Error())
-					time.Sleep(time.Second)
+					time.Sleep(time.Second * 5)
 					continue
 				}
 				_log.Infof("CONNECT PEER SUCCESS %s", addr)
@@ -74,5 +77,5 @@ func runPostRun(ch chan<- error) {
 		wg.Add(1)
 	}
 	wg.Wait()
-	// _log.Info("APP LOAD POST-RUN")
+	_log.Info("APP LOAD POST-RUN")
 }

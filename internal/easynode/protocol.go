@@ -21,11 +21,14 @@ type InfoMessage struct {
 }
 type PacketMessage struct {
 	NodeID  string `msgp:"node_id" json:"node_id"`
+	Target  string `msgp:"target" json:"target"`
+	TTL     int    `msgp:"ttl" json:"ttl"`
 	Payload []byte `msgp:"payload" json:"payload"`
 }
-type TunnelMessage struct {
-	NodeID string `msgp:"node_id" json:"node_id"`
-	From   string `msgp:"from" json:"from"`
-	To     string `msgp:"to" json:"to"`
-	ID     string `msgp:"id" json:"id"`
-}
+
+// type TunnelMessage struct {
+// 	NodeID string `msgp:"node_id" json:"node_id"`
+// 	From   string `msgp:"from" json:"from"`
+// 	To     string `msgp:"to" json:"to"`
+// 	ID     string `msgp:"id" json:"id"`
+// }

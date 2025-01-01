@@ -50,6 +50,7 @@ func initTun() error {
 	}
 	// go tunnelLoop()
 	go packetLoop()
+	// go checkAccessLoop()
 	return nil
 }
 
@@ -83,16 +84,36 @@ func packetLoop() {
 			_log.Error(err)
 			continue
 		}
+		msg := &PacketMessage{NodeID: _config.NodeID, Target: addr.NodeID, TTL: 10, Payload: buf[:n]}
 		s, ok := _store.session.node_to_session[addr.NodeID]
 		if ok {
 			c := s.AllocateContext()
-			err := c.SetResponse(ID_PACKET, &PacketMessage{NodeID: _config.NodeID, Payload: buf[:n]})
-			s.Send(c)
+			err := c.SetResponse(ID_PACKET, msg)
 			if err != nil {
 				_log.Error(err)
+				continue
+			}
+			if !s.Send(c) {
+				delete(_store.session.node_to_session, addr.NodeID)
+			}
+			continue
+		}
+		for _, nodeIDs := range _graph.FindAllPaths(_config.NodeID, addr.NodeID) {
+			for _, nodeID := range nodeIDs {
+				s, ok := _store.session.node_to_session[nodeID]
+				if ok {
+					c := s.AllocateContext()
+					err := c.SetResponse(ID_PACKET, msg)
+					if err != nil {
+						_log.Error(err)
+						return
+					}
+					if s.Send(c) {
+						return
+					}
+				}
 			}
 		}
-		
 	}
 }
 
@@ -128,5 +149,16 @@ func packetLoop() {
 // 			}
 // 		}
 // 		time.Sleep(time.Second * 5)
+// 	}
+// }
+
+// func checkAccessLoop() {
+// 	Load(_db)
+// 	for {
+// 		var addrs []Address
+// 		err := _db.Model(&Address{}).Where("is_access = ?").Find(&addrs).Error
+// 		if err != nil {
+// 			_log.Error(err)
+// 		}
 // 	}
 // }

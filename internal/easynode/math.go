@@ -4,8 +4,23 @@ import (
 	"sort"
 )
 
+var _graph *Graph
+
+func init() {
+	_graph = NewGraph()
+	nodes := []string{"node_1","node_2", "node_3"}
+	for _, n1 := range nodes {
+		for _, n2 := range nodes {
+			if n1 != n2 {
+				_graph.AddEdge(n1, n2)
+			}
+		}
+	}
+}
+
 type Graph struct {
 	adjList map[string][]string
+	
 }
 
 func NewGraph() *Graph {
@@ -52,14 +67,14 @@ func (g *Graph) dfs(current, end string, visited map[string]bool, currentPath []
 
 // func main() {
 // 	graph := NewGraph()
-// 	nodes := []string{"A", "B", "C", "D", "E"}
-// 	for _, n1 := range nodes {
-// 		for _, n2 := range nodes {
-// 			if n1 != n2 {
-// 				graph.AddEdge(n1, n2)
-// 			}
-// 		}
-// 	}
+	// nodes := []string{"A", "B", "C", "D", "E"}
+	// for _, n1 := range nodes {
+	// 	for _, n2 := range nodes {
+	// 		if n1 != n2 {
+	// 			graph.AddEdge(n1, n2)
+	// 		}
+	// 	}
+	// }
 
 // 	start, end := "A", "D"
 // 	paths := graph.FindAllPaths(start, end)

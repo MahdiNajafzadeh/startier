@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,11 +42,11 @@ type Server struct {
 	tls       bool
 	tlsConfig *tls.Config
 	// Pool Sessions
-	sessions   map[interface{}]Session
-	sessionsMu sync.RWMutex
+	// sessions   map[interface{}]Session
+	// sessionsMu sync.RWMutex
 	// Pool Tunnels
-	tunnels   map[interface{}]Tunnel
-	tunnelsMu sync.RWMutex
+	// tunnels map[interface{}]Tunnel
+	// tunnelsMu sync.RWMutex
 }
 
 // ServerOption is the option for Server.
@@ -100,10 +99,6 @@ func NewServer(opt *ServerOption) *Server {
 		asyncRouter:           opt.AsyncRouter,
 		tls:                   false,
 		tlsConfig:             nil,
-		sessions:              make(map[interface{}]Session),
-		sessionsMu:            sync.RWMutex{},
-		tunnels:               make(map[interface{}]Tunnel),
-		tunnelsMu:             sync.RWMutex{},
 	}
 }
 
@@ -193,10 +188,6 @@ func (s *Server) handleConn(conn net.Conn) {
 		asyncRouter:   s.asyncRouter,
 	})
 
-	s.sessionsMu.Lock()
-	s.sessions[sess.id] = sess
-	s.sessionsMu.Unlock()
-
 	if s.OnSessionCreate != nil {
 		s.OnSessionCreate(sess)
 	}
@@ -209,10 +200,6 @@ func (s *Server) handleConn(conn net.Conn) {
 	case <-sess.closedC: // wait for session finished.
 	case <-s.stoppedC: // or the server is stopped.
 	}
-
-	s.sessionsMu.Lock()
-	delete(s.sessions, sess.id)
-	s.sessionsMu.Unlock()
 
 	if s.OnSessionClose != nil {
 		s.OnSessionClose(sess)
@@ -278,16 +265,4 @@ func (s *Server) Request(addr string, id interface{}, v interface{}) error {
 	}
 	go s.handleConn(conn)
 	return nil
-}
-
-func (s *Server) Sessions() map[interface{}]Session {
-	s.sessionsMu.RLock()
-	defer s.sessionsMu.RUnlock()
-	return s.sessions
-}
-
-func (s *Server) Tunnels() map[interface{}]Tunnel {
-	s.tunnelsMu.RLock()
-	defer s.tunnelsMu.RUnlock()
-	return s.tunnels
 }

@@ -3,7 +3,6 @@ package easynode
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"gorm.io/driver/sqlite"
@@ -23,7 +22,7 @@ func init() {
 		_log.Error(err)
 		panic(err)
 	}
-	err = db.AutoMigrate(&Address{}, &Node{})
+	err = db.AutoMigrate(&Address{}, &Node{}, &Connection{})
 	if err != nil {
 		_log.Error(err)
 		panic(err)
@@ -43,6 +42,11 @@ type Address struct {
 	IsPrivate bool   `gorm:"index:unique_address_idx,unique" msgp:"is_private" json:"is_private"`
 }
 
+type Connection struct {
+	ID     string `grom:"primaryKey"`
+	NodeID string
+}
+
 func (a *Address) ToJSON() string {
 	b, _ := json.Marshal(a)
 	return string(b)
@@ -55,15 +59,12 @@ func (a *Address) BeforeSave(tx *gorm.DB) error {
 		return err
 	}
 	a.ID = fmt.Sprintf("%d", hash)
+	defer tx.Create(&Node{ID: a.NodeID})
 	return nil
 }
 
 func (a *Address) AfterSave(tx *gorm.DB) error {
 	_log.Infof("DB CREATE ADDRESS %s", a.ToJSON())
-	go func() {
-		time.Sleep(time.Second)
-		tx.FirstOrCreate(&Node{ID: a.NodeID})
-	}()
 	return nil
 }
 
@@ -73,6 +74,6 @@ func (n *Node) ToJSON() string {
 }
 
 func (n *Node) AfterSave(tx *gorm.DB) error {
-	_log.Infof("DB CREATE NODE %s", n.ToJSON())
+	_log.Infof("DB CREATE NODE    %s", n.ToJSON())
 	return nil
 }

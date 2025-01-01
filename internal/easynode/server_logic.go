@@ -1,6 +1,9 @@
 package easynode
 
 import (
+	"log"
+	"time"
+
 	"gorm.io/gorm"
 )
 
@@ -18,10 +21,10 @@ func initServer() error {
 		},
 	)
 	_server.OnSessionCreate = func(s Session) {
-		_log.Debugf("CREATE + SESSION  %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr())
+		_log.Debugf("+SESSION  %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr())
 	}
 	_server.OnSessionClose = func(s Session) {
-		_log.Debugf("CLOSE - SESSION  %v %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr(), s.Get("node_id"))
+		_log.Debugf("-SESSION  %v %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr(), s.Get("node_id"))
 	}
 	_server.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) {
@@ -47,9 +50,51 @@ func initServer() error {
 			_log.Error(err)
 			return
 		}
-		_, err := _tun.Write(msg.Payload)
+		if msg.Target == _config.NodeID {
+			log.Print("is me !!!")
+			_, err := _tun.Write(msg.Payload)
+			if err != nil {
+				_log.Error(err)
+			}
+			return
+		}
+		if msg.TTL == 0 {
+			return
+		}
+		msg.TTL -= 1
+		var tNode Node
+		err := _db.Model(Node{}).Where("id = ?", msg.Target).First(&tNode).Error
 		if err != nil {
 			_log.Error(err)
+			return
+		}
+		s, ok := _store.session.node_to_session[msg.Target]
+		if ok {
+			c := s.AllocateContext()
+			err := c.SetResponse(ID_PACKET, msg)
+			if err != nil {
+				_log.Error(err)
+				return
+			}
+			if s.Send(c) {
+				return
+			}
+		}
+		for _, nodeIDs := range _graph.FindAllPaths(_config.NodeID, tNode.ID) {
+			for _, nodeID := range nodeIDs {
+				s, ok := _store.session.node_to_session[nodeID]
+				if ok {
+					c := s.AllocateContext()
+					err := c.SetResponse(ID_PACKET, msg)
+					if err != nil {
+						_log.Error(err)
+						return
+					}
+					if s.Send(c) {
+						return
+					}
+				}
+			}
 		}
 	})
 	_server.AddRoute(ID_CONFLICT, func(c Context) {
@@ -71,6 +116,7 @@ func initServer() error {
 					if err != nil {
 						return err
 					}
+					c.Send()
 				}
 				var count int64
 				err := tx.Model(&Address{}).Where(&v).Count(&count).Error
@@ -84,6 +130,7 @@ func initServer() error {
 						return err
 					}
 				}
+				time.Sleep(time.Millisecond * 100)
 			}
 			return nil
 		})
@@ -91,19 +138,27 @@ func initServer() error {
 			_log.Error(err)
 			return
 		}
-		for _, sess := range _server.Sessions() {
-			if sess.ID() != c.Session().ID() {
-				err := sess.
-					AllocateContext().
-					SetResponse(ID_INFO, &InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
+		for _, s := range _store.session.node_to_session {
+			if s.ID() != c.Session().ID() {
+				c := s.AllocateContext()
+				err := c.SetResponse(ID_INFO, &InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
 				if err != nil {
 					_log.Error(err)
+					continue
 				}
+				s.Send(c)
 			}
 		}
 		addrs = []Address{}
-		_db.Where("node_id != ?", msg.NodeID).Find(&addrs)
-		c.SetResponse(ID_INFO, InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
+		err = _db.Where("node_id != ?", msg.NodeID).Find(&addrs).Error
+		if err != nil {
+			_log.Error(err)
+		}
+		err = c.SetResponse(ID_INFO, InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
+		if err != nil {
+			_log.Error(err)
+		}
+		c.Send()
 	})
 	_server.AddRoute(ID_INFO, func(c Context) {
 		var msg InfoMessage
@@ -114,10 +169,8 @@ func initServer() error {
 			return
 		}
 		for _, v := range msg.Addresses {
-			err := _db.FirstOrCreate(&v).Error
-			if err != nil {
-				_log.Error(err)
-			}
+			time.Sleep(time.Millisecond * 100)
+			_db.FirstOrCreate(&v)
 		}
 	})
 	err := _server.Run(_config.Listen)

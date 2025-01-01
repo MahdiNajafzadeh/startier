@@ -25,7 +25,7 @@ func NewCustomLogger() *zap.SugaredLogger {
 		EncodeLevel:      func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(level.CapitalString()) },
 		EncodeDuration:   zapcore.StringDurationEncoder,
 		EncodeCaller:     zapcore.ShortCallerEncoder,
-		ConsoleSeparator: " . ",
+		// ConsoleSeparator: " . ",
 	}
 	return zap.New(
 		zapcore.NewCore(
@@ -33,4 +33,9 @@ func NewCustomLogger() *zap.SugaredLogger {
 			os.Stdout,
 			zapcore.DebugLevel,
 		)).Sugar()
+	// l, err := zap.NewDevelopment()
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// return l.Sugar()
 }
