@@ -79,7 +79,7 @@ func (c *Config) LoadPublicAddress() error {
 		if ip.To4() == nil || ip.IsLoopback() || localIP.Equal(ip) {
 			continue
 		}
-		ipnet.IP = ip 
+		ipnet.IP = ip
 		Load(_db)
 		err = _db.Create(&Address{
 			NodeID:   _config.NodeID,
@@ -93,7 +93,7 @@ func (c *Config) LoadPublicAddress() error {
 	return nil
 }
 
-func (c *Config) ToJSON() string {
+func (c *Config) JSON() string {
 	b, _ := json.Marshal(c)
 	return string(b)
 }

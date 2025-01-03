@@ -1,7 +1,6 @@
 package easynode
 
 import (
-	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,26 +21,32 @@ func initServer() error {
 	)
 	_server.OnSessionCreate = func(s Session) {
 		_log.Debugf("+SESSION  %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr())
+		c := s.AllocateContext()
+		c.SetResponse(ID_WHO, &WhoMessage{Token: s.ID().(string), Me: _config.NodeID, You: ""})
+		s.Send(c)
 	}
 	_server.OnSessionClose = func(s Session) {
 		_log.Debugf("-SESSION  %v %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr(), s.Get("node_id"))
 	}
 	_server.Use(func(next HandlerFunc) HandlerFunc {
 		return func(c Context) {
-			next(c)
-			var msg BaseNodeID
-			if err := c.Bind(&msg); err != nil {
-				return
-			}
-			if msg.NodeID == "" {
-				return
-			}
+			_log.Debug(c.Request().ID())
+			go next(c)
 			if c.Session().Get("node_id") != nil {
 				return
 			}
-			_log.Debugf("NET HANDLE USE %v %v", c.Request().ID(), msg.NodeID)
+			var msg BaseNodeID
+			if err := c.Bind(&msg); err != nil || msg.NodeID == "" {
+				return
+			}
 			c.Session().Set("node_id", msg.NodeID)
-			_store.session.node_to_session[msg.NodeID] = c.Session()
+			_db.Create(&Connection{NodeID: msg.NodeID, SessionID: c.Session().ID().(string), Status: "OK"})
+		}
+	})
+	_server.AddRoute(ID_WHO, func(c Context) {
+		var msg WhoMessage
+		if err := c.Bind(&msg); err != nil {
+			return
 		}
 	})
 	_server.AddRoute(ID_PACKET, func(c Context) {
@@ -51,7 +56,6 @@ func initServer() error {
 			return
 		}
 		if msg.Target == _config.NodeID {
-			log.Print("is me !!!")
 			_, err := _tun.Write(msg.Payload)
 			if err != nil {
 				_log.Error(err)
@@ -62,12 +66,6 @@ func initServer() error {
 			return
 		}
 		msg.TTL -= 1
-		var tNode Node
-		err := _db.Model(Node{}).Where("id = ?", msg.Target).First(&tNode).Error
-		if err != nil {
-			_log.Error(err)
-			return
-		}
 		s, ok := _store.session.node_to_session[msg.Target]
 		if ok {
 			c := s.AllocateContext()
@@ -80,15 +78,24 @@ func initServer() error {
 				return
 			}
 		}
+		var tNode Node
+		err := _db.Model(Node{}).Where("id = ?", msg.Target).First(&tNode).Error
+		if err != nil {
+			_log.Error(err)
+			return
+		}
 		for _, nodeIDs := range _graph.FindAllPaths(_config.NodeID, tNode.ID) {
 			for _, nodeID := range nodeIDs {
+				if nodeID == _config.NodeID || nodeID == tNode.ID {
+					continue
+				}
 				s, ok := _store.session.node_to_session[nodeID]
 				if ok {
 					c := s.AllocateContext()
 					err := c.SetResponse(ID_PACKET, msg)
 					if err != nil {
 						_log.Error(err)
-						return
+						continue
 					}
 					if s.Send(c) {
 						return

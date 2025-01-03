@@ -2,6 +2,7 @@ package easynode
 
 const (
 	ID_CONFLICT int = iota
+	ID_WHO
 	ID_PACKET
 	ID_JOIN
 	ID_INFO
@@ -10,6 +11,11 @@ const (
 
 type BaseNodeID struct {
 	NodeID string `msgp:"node_id" json:"node_id"`
+}
+type WhoMessage struct {
+	Token string `msgp:"token" json:"token"`
+	Me    string `msgp:"me" json:"me"`
+	You   string `msgp:"you" json:"you"`
 }
 type JoinMessage struct {
 	NodeID    string    `msgp:"node_id" json:"node_id"`

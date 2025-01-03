@@ -15,7 +15,7 @@ func Run(configPath string) error {
 		return err
 	}
 	// _log.Info("APP LOAD CONFIG")
-	_log.Infof("CONFIG %s", _config.ToJSON())
+	_log.Infof("CONFIG %s", _config.JSON())
 	ch := make(chan error)
 	go runServer(ch)
 	go runTun(ch)

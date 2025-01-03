@@ -3,6 +3,7 @@ package easynode
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"gorm.io/driver/sqlite"
@@ -12,11 +13,10 @@ import (
 
 var _db *gorm.DB
 
-// file::memory:?mode=memory&cache=shared&_fk=1
-
 func init() {
+	var logLevel logger.LogLevel = logger.Silent
 	db, err := gorm.Open(sqlite.Open("file::memory:?mode=memory&cache=shared"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger: logger.Default.LogMode(logLevel),
 	})
 	if err != nil {
 		_log.Error(err)
@@ -43,11 +43,12 @@ type Address struct {
 }
 
 type Connection struct {
-	ID     string `grom:"primaryKey"`
-	NodeID string
+	SessionID string `grom:"primaryKey" msgp:"session_id" json:"session_id"`
+	NodeID    string `msgp:"node_id" json:"node_id"`
+	Status    string `msgp:"status" json:"status"`
 }
 
-func (a *Address) ToJSON() string {
+func (a *Address) JSON() string {
 	b, _ := json.Marshal(a)
 	return string(b)
 }
@@ -64,16 +65,32 @@ func (a *Address) BeforeSave(tx *gorm.DB) error {
 }
 
 func (a *Address) AfterSave(tx *gorm.DB) error {
-	_log.Infof("DB CREATE ADDRESS %s", a.ToJSON())
+	_log.Infof("DB CREATE ADDRESS %s", a.JSON())
 	return nil
 }
 
-func (n *Node) ToJSON() string {
+func (n *Node) JSON() string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }
 
 func (n *Node) AfterSave(tx *gorm.DB) error {
-	_log.Infof("DB CREATE NODE    %s", n.ToJSON())
+	_log.Infof("DB CREATE NODE    %s", n.JSON())
 	return nil
+}
+
+func (c *Connection) JSON() string {
+	b, _ := json.Marshal(c)
+	return string(b)
+}
+
+func (c *Connection) AfterSave(tx *gorm.DB) error {
+	_log.Infof("DB CREATE CONNECTION %s", c.JSON())
+	return nil
+}
+
+func LogDBErr(err error) {
+	if err != gorm.ErrRecordNotFound || strings.Contains(err.Error(), "database table is locked") {
+		_log.Error(err)
+	}
 }
