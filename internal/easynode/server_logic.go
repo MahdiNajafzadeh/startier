@@ -16,17 +16,15 @@ func initServer() error {
 	_server.OnSessionCreate = func(s Session) {
 		go func() {
 			c := s.AllocateContext()
-			c.SetResponse(ID_WHO, &WhoMessage{Token: s.ID().(string), Me: _config.NodeID, You: ""})
-			c.Send()
+			c.SetResponse(ID_WHO, &WhoMessage{Token: s.ID().(string), Sender: _config.NodeID})
+			s.Send(c)
 		}()
 	}
 	_server.OnSessionClose = func(s Session) {
-		conn := Connection{SessionID: s.ID().(string)}
-		nid, exist := s.Store().Get("node_id")
-		if exist {
-			conn.NodeID = nid.(string)
-		}
-		_db.Where("session_id = ?", conn.SessionID).Delete(&conn)
+		go func() {
+			conn := Connection{SessionID: s.ID().(string)}
+			_db.Where("session_id = ?", conn.SessionID).Delete(&conn)
+		}()
 	}
 	_server.AddRoute(ID_WHO, func(c Context) {
 		var msg WhoMessage
@@ -34,17 +32,42 @@ func initServer() error {
 			return
 		}
 		sessionID := c.Session().ID().(string)
-		if msg.Token == sessionID || msg.You == _config.NodeID {
-			c.Session().Store().Set("node_id", msg.Me)
-			_db.Model(&Node{}).Create(&Node{ID: msg.Me})
-			_db.Model(&Connection{}).Create(&Connection{SessionID: sessionID, NodeID: msg.Me})
-			_db.Model(&Edge{}).Create(&Edge{From: _config.NodeID, To: msg.Me})
-			_tun_conn_cache.Set(msg.Me, c.Session())
+		if msg.Token == sessionID {
+			if msg.Receiver != "" {
+				if msg.Sender != "" {
+					if msg.Receiver != _config.NodeID {
+						_db.Model(&Node{}).Create(&Node{ID: msg.Receiver})
+						_db.Model(&Edge{}).Create(&Edge{From: _config.NodeID, To: msg.Receiver})
+						_db.Model(&Connection{}).Create(&Connection{SessionID: sessionID, NodeID: msg.Receiver})
+						c.Session().Store().Set("node_id", msg.Receiver)
+						_tun_conn_cache.Set(msg.Receiver, c.Session())
+						return
+					} else {
+						c.SetResponse(ID_CONFLICT, 0)
+						c.Send()
+					}
+				}
+			}
 		} else {
-			msg.You = msg.Me
-			msg.Me = _config.NodeID
-			c.SetResponse(ID_WHO, &msg)
+			if msg.Sender != "" {
+				if msg.Receiver == "" {
+					if msg.Sender != _config.NodeID {
+						msg.Receiver = _config.NodeID
+						c.SetResponse(ID_WHO, &msg)
+						c.Send()
+						_db.Model(&Node{}).Create(&Node{ID: msg.Sender})
+						_db.Model(&Edge{}).Create(&Edge{From: msg.Sender, To: _config.NodeID})
+						_db.Model(&Connection{}).Create(&Connection{SessionID: sessionID, NodeID: msg.Sender})
+						c.Session().Store().Set("node_id", msg.Sender)
+						_tun_conn_cache.Set(msg.Sender, c.Session())
+						return
+					} else {
+						_log.Fatal("NET CONF")
+					}
+				}
+			}
 		}
+		c.Session().Close()
 	})
 	_server.AddRoute(ID_PACKET, func(c Context) {
 		var msg PacketMessage
@@ -98,11 +121,15 @@ func initServer() error {
 		}
 	})
 	_server.AddRoute(ID_CONFLICT, func(c Context) {
+		_log.Error(c.Session().Conn().RemoteAddr())
 		_log.Fatal("NET CONFLIC")
 	})
 	_server.AddRoute(ID_JOIN, func(c Context) {
 		var msg InfoMessage
 		if err := c.Bind(&msg); err != nil {
+			return
+		}
+		if len(msg.Node.Create) == 0 {
 			return
 		}
 		node := msg.Node.Create[0]
@@ -136,12 +163,12 @@ func initServer() error {
 		if err := c.Bind(&msg); err != nil {
 			return
 		}
-		// _db.Model(&Address{}).Create(&msg.Address.Create)
-		// _db.Model(&Node{}).Create(&msg.Node.Create)
-		// _db.Model(&Edge{}).Create(&msg.Edge.Create)
-		// _db.Model(&Address{}).Delete(&msg.Address.Delete)
-		// _db.Model(&Node{}).Delete(&msg.Node.Delete)
-		// _db.Model(&Edge{}).Delete(&msg.Edge.Delete)
+		_db.Model(&Address{}).Create(&msg.Address.Create)
+		_db.Model(&Node{}).Create(&msg.Node.Create)
+		_db.Model(&Edge{}).Create(&msg.Edge.Create)
+		_db.Model(&Address{}).Delete(&msg.Address.Delete)
+		_db.Model(&Node{}).Delete(&msg.Node.Delete)
+		_db.Model(&Edge{}).Delete(&msg.Edge.Delete)
 	})
 	err := _server.Run(_config.Listen)
 	return err

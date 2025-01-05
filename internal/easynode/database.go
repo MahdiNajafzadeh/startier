@@ -13,7 +13,10 @@ import (
 var _db *gorm.DB
 
 func init() {
-	var logLevel logger.LogLevel = logger.Silent
+	var logLevel logger.LogLevel
+	logLevel = logger.Error
+	logLevel = logger.Info
+	logLevel = logger.Silent
 	db, err := gorm.Open(sqlite.Open("file::memory:?mode=memory&cache=shared"), &gorm.Config{
 		Logger: logger.Default.LogMode(logLevel),
 	})
@@ -30,8 +33,7 @@ func init() {
 }
 
 type Node struct {
-	ID  string `gorm:"primaryKey" msgp:"id" json:"id"`
-	GID string `msgp:"-" json:"gid"`
+	ID string `gorm:"primaryKey" msgp:"id" json:"id"`
 }
 
 type Address struct {
@@ -48,7 +50,7 @@ type Connection struct {
 }
 
 type Edge struct {
-	ID   string `gorm:"primaryKey" msgp:"id" json:"-" hash:"-"`
+	ID   int    `gorm:"primaryKey" msgp:"id" json:"id" hash:"-"`
 	From string `gorm:"index:unique_edge_idx,unique" msgp:"from" json:"from"`
 	To   string `gorm:"index:unique_edge_idx,unique" msgp:"to" json:"to"`
 }
@@ -82,22 +84,24 @@ func (n *Node) JSON() string {
 	return string(b)
 }
 
+func (n *Node) GraphID() int64 {
+	h, _ := hashstructure.Hash(n, hashstructure.FormatV2, nil)
+	return int64(h)
+}
+
 func (n *Node) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
 func (n *Node) AfterSave(tx *gorm.DB) error {
-	gnode := _graph.NewNode()
-	n.GID = fmt.Sprintf("%d", gnode.ID())
-	_log.Infof("(+) NODE       %s", n.JSON())
-	_graph.AddNode(gnode)
-	err := tx.UpdateColumn("gid", n.GID).Error
-	_log.Error(err)
+	// _log.Infof("(+) NODE       %s", n.JSON())
+	gn, _ := _graph.NodeWithID(n.GraphID())
+	_graph.AddNode(gn)
 	return nil
 }
 
 func (n *Node) AfterDelete(tx *gorm.DB) error {
-	_log.Infof("(-) NODE       %s", n.JSON())
+	// _log.Infof("(-) NODE       %s", n.JSON())
 	return nil
 }
 
@@ -125,27 +129,22 @@ func (g *Edge) JSON() string {
 	return string(b)
 }
 
-func (g *Edge) BeforeSave(tx *gorm.DB) error {
-	if g.From == g.To {
+func (e *Edge) BeforeSave(tx *gorm.DB) error {
+	if e.From == e.To {
 		return fmt.Errorf("'Edge.From' & 'Edge.To' is equal")
 	}
-	hash, _ := hashstructure.Hash(g, hashstructure.FormatV2, nil)
-	g.ID = fmt.Sprintf("%d", hash)
+	h, _ := hashstructure.Hash(e, hashstructure.FormatV2, nil)
+	e.ID = int(uint64(h))
 	return nil
 }
 
 func (g *Edge) AfterSave(tx *gorm.DB) error {
 	_log.Infof("(+) EDGE       %s", g.JSON())
-	nodeFrom := Node{ID: g.From}
-	nodeTo := Node{ID: g.To}
-	_db.Table("edgs").Find(&nodeFrom)
-	_db.Table("edgs").Find(&nodeTo)
-	_log.Infof("AFTER-ADD-EDGE : %s", g.JSON())
-	// _graph.SetEdge(
-	// 	_graph.NewEdge(
-	// 		_graph.Node(nodeFrom.GID),
-	// 		_graph.Node(nodeTo.GID),
-	// 	),
-	// )
+	_graph.SetEdge(
+		_graph.NewEdge(
+			_graph.Node(),
+			_graph.Node(),
+		),
+	)
 	return nil
 }

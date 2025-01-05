@@ -3,6 +3,7 @@ module github.com/MahdiNajafzadeh/easynode
 go 1.23.4
 
 require (
+	github.com/arnauddri/algorithms v0.0.0-20150202233547-736f5ebe59cf
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12
 	github.com/mitchellh/hashstructure/v2 v2.0.2
@@ -12,13 +13,13 @@ require (
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	go.uber.org/zap v1.27.0
+	gonum.org/v1/gonum v0.15.1
 	google.golang.org/protobuf v1.36.1
 	gorm.io/driver/sqlite v1.5.7
 	gorm.io/gorm v1.25.12
 )
 
 require (
-	github.com/arnauddri/algorithms v0.0.0-20150202233547-736f5ebe59cf // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
@@ -30,5 +31,4 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	gonum.org/v1/gonum v0.15.1 // indirect
 )

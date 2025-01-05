@@ -9,9 +9,9 @@ const (
 )
 
 type WhoMessage struct {
-	Token string `msgp:"token" json:"token"`
-	Me    string `msgp:"me" json:"me"`
-	You   string `msgp:"you" json:"you"`
+	Token    string `msgp:"token" json:"token"`
+	Sender   string `msgp:"sender" json:"sender"`
+	Receiver string `msgp:"receiver" json:"receiver"`
 }
 type Entity[T any] struct {
 	Create []T `msgp:"create"`
@@ -21,7 +21,7 @@ type Entity[T any] struct {
 type InfoMessage struct {
 	Node    Entity[Node]    `msgp:"node"`
 	Address Entity[Address] `msgp:"address"`
-	Edge   Entity[Edge]   `msgp:"edge"`
+	Edge    Entity[Edge]    `msgp:"edge"`
 }
 type PacketMessage struct {
 	FromNode string `msgp:"from_node" json:"from_node"`

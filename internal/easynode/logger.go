@@ -15,27 +15,18 @@ func init() {
 
 func NewCustomLogger() *zap.SugaredLogger {
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:    "time",
-		LevelKey:   "level",
-		MessageKey: "msg",
-		// EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-		// 	enc.AppendString(t.Format("2006/01/02 15:04:05"))
-		// },
-		EncodeLevel:    func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(level.CapitalString()) },
-		// EncodeDuration: zapcore.StringDurationEncoder,
-		// EncodeCaller:   zapcore.ShortCallerEncoder,
-		// ConsoleSeparator: " . ",
+		TimeKey:     "time",
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		CallerKey:   "caller",
+		EncodeLevel: func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(level.CapitalString()) },
+		EncodeTime:  zapcore.ISO8601TimeEncoder,
+		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
-	return zap.New(
-		zapcore.NewCore(
-			zapcore.NewConsoleEncoder(encoderConfig),
-			os.Stdout,
-			zapcore.DebugLevel,
-		),
-	).Sugar()
-	// l, err := zap.NewDevelopment()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// return l.Sugar()
+	core := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		zapcore.AddSync(os.Stdout),
+		zapcore.DebugLevel,
+	)
+	return zap.New(core, zap.AddCaller()).Sugar()
 }

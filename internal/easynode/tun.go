@@ -89,7 +89,6 @@ TunLoop:
 			continue
 		}
 		msg := &PacketMessage{FromNode: _config.NodeID, ToNode: addr.NodeID, TTL: 10, Payload: buf[:n]}
-		//-UseCachedConnectionForNode
 		s, ok := _tun_conn_cache.Get(addr.NodeID)
 		if ok {
 			c := s.AllocateContext()
@@ -100,7 +99,6 @@ TunLoop:
 			_tun_conn_cache.Del(addr.NodeID)
 			s.Close()
 		}
-		//-
 		var connections []Connection
 		err = _db.
 			Model(&Connection{}).
@@ -113,7 +111,6 @@ TunLoop:
 			}
 			continue
 		}
-		//-UseAllConnectionToTasgetNode
 		for _, conn := range connections {
 			s, ok := _server.Sessions().Get(conn.SessionID)
 			if ok {
@@ -131,5 +128,6 @@ TunLoop:
 	}
 }
 
-// func routePacket(msg *PacketMessage) error {
-// }
+func RoutePacket(msg *PacketMessage) error {
+	return nil
+}
