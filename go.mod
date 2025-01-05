@@ -18,6 +18,7 @@ require (
 )
 
 require (
+	github.com/arnauddri/algorithms v0.0.0-20150202233547-736f5ebe59cf // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
@@ -29,4 +30,5 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
+	gonum.org/v1/gonum v0.15.1 // indirect
 )

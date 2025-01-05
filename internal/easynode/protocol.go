@@ -3,38 +3,29 @@ package easynode
 const (
 	ID_CONFLICT int = iota
 	ID_WHO
-	ID_PACKET
-	ID_JOIN
 	ID_INFO
-	ID_TUNNEL
+	ID_JOIN
+	ID_PACKET
 )
 
-type BaseNodeID struct {
-	NodeID string `msgp:"node_id" json:"node_id"`
-}
 type WhoMessage struct {
 	Token string `msgp:"token" json:"token"`
 	Me    string `msgp:"me" json:"me"`
 	You   string `msgp:"you" json:"you"`
 }
-type JoinMessage struct {
-	NodeID    string    `msgp:"node_id" json:"node_id"`
-	Addresses []Address `msgp:"addresses" json:"addresses"`
+type Entity[T any] struct {
+	Create []T `msgp:"create"`
+	Update []T `msgp:"update"`
+	Delete []T `msgp:"delete"`
 }
 type InfoMessage struct {
-	NodeID    string    `msgp:"node_id" json:"node_id"`
-	Addresses []Address `msgp:"addresses" json:"addresses"`
+	Node    Entity[Node]    `msgp:"node"`
+	Address Entity[Address] `msgp:"address"`
+	Edge   Entity[Edge]   `msgp:"edge"`
 }
 type PacketMessage struct {
-	NodeID  string `msgp:"node_id" json:"node_id"`
-	Target  string `msgp:"target" json:"target"`
-	TTL     int    `msgp:"ttl" json:"ttl"`
-	Payload []byte `msgp:"payload" json:"payload"`
+	FromNode string `msgp:"from_node" json:"from_node"`
+	ToNode   string `msgp:"to_node" json:"to_node"`
+	TTL      int    `msgp:"ttl" json:"ttl"`
+	Payload  []byte `msgp:"payload" json:"payload"`
 }
-
-// type TunnelMessage struct {
-// 	NodeID string `msgp:"node_id" json:"node_id"`
-// 	From   string `msgp:"from" json:"from"`
-// 	To     string `msgp:"to" json:"to"`
-// 	ID     string `msgp:"id" json:"id"`
-// }

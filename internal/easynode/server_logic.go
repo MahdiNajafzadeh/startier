@@ -1,11 +1,5 @@
 package easynode
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
-
 var _server *Server
 
 func initServer() error {
@@ -20,33 +14,36 @@ func initServer() error {
 		},
 	)
 	_server.OnSessionCreate = func(s Session) {
-		_log.Debugf("+SESSION  %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr())
-		c := s.AllocateContext()
-		c.SetResponse(ID_WHO, &WhoMessage{Token: s.ID().(string), Me: _config.NodeID, You: ""})
-		s.Send(c)
+		go func() {
+			c := s.AllocateContext()
+			c.SetResponse(ID_WHO, &WhoMessage{Token: s.ID().(string), Me: _config.NodeID, You: ""})
+			c.Send()
+		}()
 	}
 	_server.OnSessionClose = func(s Session) {
-		_log.Debugf("-SESSION  %v %v %v", s.Conn().RemoteAddr(), s.Conn().LocalAddr(), s.Get("node_id"))
-	}
-	_server.Use(func(next HandlerFunc) HandlerFunc {
-		return func(c Context) {
-			_log.Debug(c.Request().ID())
-			go next(c)
-			if c.Session().Get("node_id") != nil {
-				return
-			}
-			var msg BaseNodeID
-			if err := c.Bind(&msg); err != nil || msg.NodeID == "" {
-				return
-			}
-			c.Session().Set("node_id", msg.NodeID)
-			_db.Create(&Connection{NodeID: msg.NodeID, SessionID: c.Session().ID().(string), Status: "OK"})
+		conn := Connection{SessionID: s.ID().(string)}
+		nid, exist := s.Store().Get("node_id")
+		if exist {
+			conn.NodeID = nid.(string)
 		}
-	})
+		_db.Where("session_id = ?", conn.SessionID).Delete(&conn)
+	}
 	_server.AddRoute(ID_WHO, func(c Context) {
 		var msg WhoMessage
 		if err := c.Bind(&msg); err != nil {
 			return
+		}
+		sessionID := c.Session().ID().(string)
+		if msg.Token == sessionID || msg.You == _config.NodeID {
+			c.Session().Store().Set("node_id", msg.Me)
+			_db.Model(&Node{}).Create(&Node{ID: msg.Me})
+			_db.Model(&Connection{}).Create(&Connection{SessionID: sessionID, NodeID: msg.Me})
+			_db.Model(&Edge{}).Create(&Edge{From: _config.NodeID, To: msg.Me})
+			_tun_conn_cache.Set(msg.Me, c.Session())
+		} else {
+			msg.You = msg.Me
+			msg.Me = _config.NodeID
+			c.SetResponse(ID_WHO, &msg)
 		}
 	})
 	_server.AddRoute(ID_PACKET, func(c Context) {
@@ -55,7 +52,7 @@ func initServer() error {
 			_log.Error(err)
 			return
 		}
-		if msg.Target == _config.NodeID {
+		if msg.ToNode == _config.NodeID {
 			_, err := _tun.Write(msg.Payload)
 			if err != nil {
 				_log.Error(err)
@@ -66,40 +63,36 @@ func initServer() error {
 			return
 		}
 		msg.TTL -= 1
-		s, ok := _store.session.node_to_session[msg.Target]
+		s, ok := _tun_conn_cache.Get(msg.ToNode)
 		if ok {
 			c := s.AllocateContext()
-			err := c.SetResponse(ID_PACKET, msg)
-			if err != nil {
-				_log.Error(err)
+			c.SetResponse(ID_PACKET, &msg)
+			if c.Send() {
 				return
 			}
-			if s.Send(c) {
-				return
-			}
+			_tun_conn_cache.Del(s.ID())
+			s.Close()
 		}
-		var tNode Node
-		err := _db.Model(Node{}).Where("id = ?", msg.Target).First(&tNode).Error
+		var connections []Connection
+		err := _db.
+			Model(&Connection{}).
+			Where("node_id = ?", msg.ToNode).
+			Find(&connections).
+			Error
 		if err != nil {
 			_log.Error(err)
 			return
 		}
-		for _, nodeIDs := range _graph.FindAllPaths(_config.NodeID, tNode.ID) {
-			for _, nodeID := range nodeIDs {
-				if nodeID == _config.NodeID || nodeID == tNode.ID {
-					continue
-				}
-				s, ok := _store.session.node_to_session[nodeID]
-				if ok {
-					c := s.AllocateContext()
-					err := c.SetResponse(ID_PACKET, msg)
-					if err != nil {
-						_log.Error(err)
-						continue
-					}
-					if s.Send(c) {
-						return
-					}
+		for _, conn := range connections {
+			s, ok := _server.Sessions().Get(conn.SessionID)
+			if ok {
+				c := s.AllocateContext()
+				c.SetResponse(ID_PACKET, &msg)
+				if s.Send(c) {
+					_tun_conn_cache.Set(msg.ToNode, s)
+					break
+				} else {
+					s.Close()
 				}
 			}
 		}
@@ -108,77 +101,47 @@ func initServer() error {
 		_log.Fatal("NET CONFLIC")
 	})
 	_server.AddRoute(ID_JOIN, func(c Context) {
-		var msg JoinMessage
+		var msg InfoMessage
 		if err := c.Bind(&msg); err != nil {
 			return
 		}
-		if len(msg.Addresses) == 0 {
+		node := msg.Node.Create[0]
+		if node.ID == _config.NodeID {
+			c.SetResponse(ID_CONFLICT, 0)
+			c.Send()
 			return
 		}
-		addrs := []Address{}
-		err := _db.Transaction(func(tx *gorm.DB) error {
-			for _, v := range msg.Addresses {
-				if msg.NodeID == _config.NodeID {
-					err := c.SetResponse(ID_CONFLICT, 0)
-					if err != nil {
-						return err
-					}
-					c.Send()
-				}
-				var count int64
-				err := tx.Model(&Address{}).Where(&v).Count(&count).Error
-				if err != nil {
-					return err
-				}
-				if count == 0 {
-					addrs = append(addrs, v)
-					err := tx.Create(&v).Error
-					if err != nil {
-						return err
-					}
-				}
-				time.Sleep(time.Millisecond * 100)
+		bmsg := msg
+		bmsg.Node = Entity[Node]{Create: msg.Node.Create}
+		bmsg.Edge = Entity[Edge]{Create: []Edge{{From: node.ID, To: _config.NodeID}}}
+		bmsg.Address = Entity[Address]{Create: []Address{}}
+		for _, v := range msg.Address.Create {
+			if v.IsPrivate && v.IPMask == _config.Local {
+				c.SetResponse(ID_CONFLICT, 0)
+				c.Send()
+				return
 			}
-			return nil
-		})
-		if err != nil {
-			_log.Error(err)
-			return
-		}
-		for _, s := range _store.session.node_to_session {
-			if s.ID() != c.Session().ID() {
-				c := s.AllocateContext()
-				err := c.SetResponse(ID_INFO, &InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
-				if err != nil {
-					_log.Error(err)
-					continue
-				}
-				s.Send(c)
+			var count int64
+			_db.Model(&Address{}).Where(&v).Count(&count)
+			if count == 0 {
+				bmsg.Address.Create = append(bmsg.Address.Create, v)
 			}
 		}
-		addrs = []Address{}
-		err = _db.Where("node_id != ?", msg.NodeID).Find(&addrs).Error
-		if err != nil {
-			_log.Error(err)
-		}
-		err = c.SetResponse(ID_INFO, InfoMessage{NodeID: _config.NodeID, Addresses: addrs})
-		if err != nil {
-			_log.Error(err)
-		}
-		c.Send()
+		_db.Create(&bmsg.Address.Create)
+		_db.Create(&bmsg.Edge.Create)
+		_server.BroadCast(ID_INFO, bmsg)
 	})
 	_server.AddRoute(ID_INFO, func(c Context) {
 		var msg InfoMessage
 		if err := c.Bind(&msg); err != nil {
 			return
 		}
-		if len(msg.Addresses) == 0 {
-			return
-		}
-		for _, v := range msg.Addresses {
-			time.Sleep(time.Millisecond * 100)
-			_db.FirstOrCreate(&v)
-		}
+		// _db.Model(&Address{}).Create(&msg.Address.Create)
+		// _db.Model(&Node{}).Create(&msg.Node.Create)
+		// _db.Model(&Edge{}).Create(&msg.Edge.Create)
+		// _db.Model(&Address{}).Delete(&msg.Address.Delete)
+		// _db.Model(&Node{}).Delete(&msg.Node.Delete)
+		// _db.Model(&Edge{}).Delete(&msg.Edge.Delete)
 	})
 	err := _server.Run(_config.Listen)
 	return err

@@ -39,24 +39,22 @@ type Session interface {
 	AfterCloseHook() <-chan struct{}
 
 	// Key/Value Store
-	Get(key string) interface{}
-	Set(key string, value interface{})
+	Store() Store[any, any]
 }
 
 type session struct {
-	id               interface{}   // session's ID.
-	conn             net.Conn      // tcp connection
-	closedC          chan struct{} // to close when read/write loop stopped
-	closeOnce        sync.Once     // ensure one session only close once
-	afterCreateHookC chan struct{} // to close after session's on-create hook triggered
-	afterCloseHookC  chan struct{} // to close after session's on-close hook triggered
-	respStream       chan Context  // response queue channel, pushed in Send() and popped in writeOutbound()
-	packer           Packer        // to pack and unpack message
-	codec            Codec         // encode/decode message data
-	ctxPool          sync.Pool     // router context pool
-	asyncRouter      bool          // calls router HandlerFunc in a goroutine if false
-	storeMu          sync.RWMutex
-	store            map[string]interface{}
+	id               interface{}     // session's ID.
+	conn             net.Conn        // tcp connection
+	closedC          chan struct{}   // to close when read/write loop stopped
+	closeOnce        sync.Once       // ensure one session only close once
+	afterCreateHookC chan struct{}   // to close after session's on-create hook triggered
+	afterCloseHookC  chan struct{}   // to close after session's on-close hook triggered
+	respStream       chan Context    // response queue channel, pushed in Send() and popped in writeOutbound()
+	packer           Packer          // to pack and unpack message
+	codec            Codec           // encode/decode message data
+	ctxPool          sync.Pool       // router context pool
+	asyncRouter      bool            // calls router HandlerFunc in a goroutine if false
+	store            Store[any, any] // key/value store
 }
 
 // sessionOption is the extra options for session.
@@ -83,8 +81,7 @@ func newSession(conn net.Conn, opt *sessionOption) *session {
 		codec:            opt.Codec,
 		ctxPool:          sync.Pool{New: func() interface{} { return newContext() }},
 		asyncRouter:      opt.asyncRouter,
-		store:            make(map[string]interface{}),
-		storeMu:          sync.RWMutex{},
+		store:            newStore[any, any](),
 	}
 }
 
@@ -158,16 +155,16 @@ func (s *session) readInbound(router *Router, timeout time.Duration) {
 		}
 		if timeout > 0 {
 			if err := s.conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-				_log.Errorf("session %s set read deadline err: %s", s.id, err)
+				// _log.Errorf("session %s set read deadline err: %s", s.id, err)
 				break
 			}
 		}
 		reqMsg, err := s.packer.Unpack(s.conn)
 		if err != nil {
 			if err == io.EOF {
-				_log.Debugf("session %s unpack inbound packet err: %s", s.id, err)
+				// _log.Debugf("session %s unpack inbound packet err: %s", s.id, err)
 			} else {
-				_log.Errorf("session %s unpack inbound packet err: %s", s.id, err)
+				// _log.Errorf("session %s unpack inbound packet err: %s", s.id, err)
 			}
 			break
 		}
@@ -180,7 +177,7 @@ func (s *session) readInbound(router *Router, timeout time.Duration) {
 			s.handleReq(router, reqMsg)
 		}
 	}
-	_log.Debugf("session %s readInbound exit because of error", s.id)
+	// _log.Debugf("session %s readInbound exit because of error", s.id)
 	s.Close()
 }
 
@@ -204,7 +201,7 @@ func (s *session) writeOutbound(writeTimeout time.Duration) {
 
 		outboundBytes, err := s.packResponse(ctx)
 		if err != nil {
-			_log.Errorf("session %s pack outbound message err: %s", s.id, err)
+			// _log.Errorf("session %s pack outbound message err: %s", s.id, err)
 			continue
 		}
 		if outboundBytes == nil {
@@ -213,7 +210,7 @@ func (s *session) writeOutbound(writeTimeout time.Duration) {
 
 		if writeTimeout > 0 {
 			if err := s.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
-				_log.Errorf("session %s set write deadline err: %s", s.id, err)
+				// _log.Errorf("session %s set write deadline err: %s", s.id, err)
 				break
 			}
 		}
@@ -224,7 +221,7 @@ func (s *session) writeOutbound(writeTimeout time.Duration) {
 		}
 	}
 	s.Close()
-	_log.Debugf("session %s writeOutbound exit because of error", s.id)
+	// _log.Debugf("session %s writeOutbound exit because of error", s.id)
 }
 
 func (s *session) packResponse(ctx Context) ([]byte, error) {
@@ -235,14 +232,6 @@ func (s *session) packResponse(ctx Context) ([]byte, error) {
 	return s.packer.Pack(ctx.Response())
 }
 
-func (s *session) Get(key string) interface{} {
-	s.storeMu.RLock()
-	defer s.storeMu.RUnlock()
-	return s.store[key]
-}
-
-func (s *session) Set(key string, value interface{}) {
-	s.storeMu.Lock()
-	defer s.storeMu.Unlock()
-	s.store[key] = value
+func (s *session) Store() Store[any, any] {
+	return s.store
 }

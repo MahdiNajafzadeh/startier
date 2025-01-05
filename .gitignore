@@ -25,3 +25,6 @@ go.work.sum
 .env
 # CUSTOM
 tmp
+.stfolder
+.stignore
+error.txt

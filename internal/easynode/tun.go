@@ -11,14 +11,16 @@ import (
 )
 
 var _tun *water.Interface
-var _join_msg *JoinMessage
+
+// var _join_msg *JoinMessage
+var _tun_conn_cache Store[any, Session]
 
 func init() {
+	_tun_conn_cache = newStore[any, Session]()
 	tun, err := water.New(water.Config{
 		DeviceType: water.TUN,
 		PlatformSpecificParams: water.PlatformSpecificParams{
-			Name: "startier",
-			// Persist: true,
+			Name: "easynode",
 		},
 	})
 	if err != nil {
@@ -58,6 +60,7 @@ func packetLoop() {
 	ip, ipnet, _ := net.ParseCIDR(_config.Local)
 	ipnet.IP = ip
 	buf := make([]byte, 1500)
+TunLoop:
 	for {
 		n, err := _tun.Read(buf)
 		if err != nil {
@@ -85,39 +88,48 @@ func packetLoop() {
 			}
 			continue
 		}
-		msg := &PacketMessage{NodeID: _config.NodeID, Target: addr.NodeID, TTL: 10, Payload: buf[:n]}
-		s, ok := _store.session.node_to_session[addr.NodeID]
+		msg := &PacketMessage{FromNode: _config.NodeID, ToNode: addr.NodeID, TTL: 10, Payload: buf[:n]}
+		//-UseCachedConnectionForNode
+		s, ok := _tun_conn_cache.Get(addr.NodeID)
 		if ok {
 			c := s.AllocateContext()
-			err := c.SetResponse(ID_PACKET, msg)
-			if err != nil {
-				_log.Error(err)
+			c.SetResponse(ID_PACKET, msg)
+			if s.Send(c) {
 				continue
 			}
-			if !s.Send(c) {
-				delete(_store.session.node_to_session, addr.NodeID)
+			_tun_conn_cache.Del(addr.NodeID)
+			s.Close()
+		}
+		//-
+		var connections []Connection
+		err = _db.
+			Model(&Connection{}).
+			Where("node_id = ?", addr.NodeID).
+			Find(&connections).
+			Error
+		if err != nil {
+			if err != gorm.ErrRecordNotFound {
+				_log.Error(err)
 			}
 			continue
 		}
-		for _, nodeIDs := range _graph.FindAllPaths(_config.NodeID, addr.NodeID) {
-			for _, nodeID := range nodeIDs {
-				if nodeID == _config.NodeID || nodeID == addr.NodeID {
-					continue
-				}
-				s, ok := _store.session.node_to_session[nodeID]
-				if ok {
-					c := s.AllocateContext()
-					err := c.SetResponse(ID_PACKET, msg)
-					if err != nil {
-						_log.Error(err)
-						continue
-					}
-					if !s.Send(c) {
-						delete(_store.session.node_to_session, addr.NodeID)
-					}
-					continue
+		//-UseAllConnectionToTasgetNode
+		for _, conn := range connections {
+			s, ok := _server.Sessions().Get(conn.SessionID)
+			if ok {
+				c := s.AllocateContext()
+				c.SetResponse(ID_PACKET, msg)
+				if s.Send(c) {
+					_tun_conn_cache.Set(addr.NodeID, s)
+					continue TunLoop
+				} else {
+					s.Close()
 				}
 			}
 		}
+		//-UseGraphConnection
 	}
 }
+
+// func routePacket(msg *PacketMessage) error {
+// }

@@ -23,9 +23,9 @@ func GetLog() *zap.SugaredLogger {
 	return _log
 }
 
-func GetJoinMessage() *JoinMessage {
-	return _join_msg
-}
+// func GetJoinMessage() *JoinMessage {
+// 	return _join_msg
+// }
 
 func LoadStop[T any](getter func() *T) {
 	for getter() == nil {
@@ -43,8 +43,8 @@ func Load(v interface{}) {
 		LoadStop(GetServer)
 	case *zap.SugaredLogger:
 		LoadStop(GetLog)
-	case *JoinMessage:
-		LoadStop(GetJoinMessage)
+	// case *JoinMessage:
+	// 	LoadStop(GetJoinMessage)
 	default:
 		panic("type is not in list")
 	}

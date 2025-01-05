@@ -38,15 +38,9 @@ type Server struct {
 	acceptingC            chan struct{}
 	stoppedC              chan struct{}
 	asyncRouter           bool
-	// TLS config
-	tls       bool
-	tlsConfig *tls.Config
-	// Pool Sessions
-	// sessions   map[interface{}]Session
-	// sessionsMu sync.RWMutex
-	// Pool Tunnels
-	// tunnels map[interface{}]Tunnel
-	// tunnelsMu sync.RWMutex
+	tls                   bool
+	tlsConfig             *tls.Config
+	sessionStore          Store[any, Session]
 }
 
 // ServerOption is the option for Server.
@@ -99,6 +93,7 @@ func NewServer(opt *ServerOption) *Server {
 		asyncRouter:           opt.AsyncRouter,
 		tls:                   false,
 		tlsConfig:             nil,
+		sessionStore:          newStore[any, Session](),
 	}
 }
 
@@ -188,6 +183,8 @@ func (s *Server) handleConn(conn net.Conn) {
 		asyncRouter:   s.asyncRouter,
 	})
 
+	s.Sessions().Set(sess.ID(), sess)
+
 	if s.OnSessionCreate != nil {
 		s.OnSessionCreate(sess)
 	}
@@ -205,6 +202,8 @@ func (s *Server) handleConn(conn net.Conn) {
 		s.OnSessionClose(sess)
 	}
 	close(sess.afterCloseHookC)
+
+	s.Sessions().Del(sess.ID())
 }
 
 // Stop stops server. Closing Listener and all connections.
@@ -237,7 +236,10 @@ func (s *Server) isStopped() bool {
 	}
 }
 
-func (s *Server) Request(addr string, id interface{}, v interface{}) error {
+func (s *Server) Connect(addr string) (net.Conn, error) {
+	for s == nil {
+		time.Sleep(time.Millisecond * 100)
+	}
 	var conn net.Conn
 	var err error
 	if s.tls {
@@ -245,6 +247,14 @@ func (s *Server) Request(addr string, id interface{}, v interface{}) error {
 	} else {
 		conn, err = net.Dial("tcp", addr)
 	}
+	if err == nil || conn != nil {
+		go s.handleConn(conn)
+	}
+	return conn, err
+}
+
+func (s *Server) Request(addr string, id interface{}, v interface{}) error {
+	conn, err := s.Connect(addr)
 	if err != nil {
 		return err
 	}
@@ -265,4 +275,16 @@ func (s *Server) Request(addr string, id interface{}, v interface{}) error {
 	}
 	go s.handleConn(conn)
 	return nil
+}
+
+func (s *Server) Sessions() Store[any, Session] {
+	return s.sessionStore
+}
+
+func (s *Server) BroadCast(id interface{}, v interface{}) {
+	for _, sess := range s.sessionStore.All() {
+		c := sess.AllocateContext()
+		c.SetResponse(id, v)
+		c.Send()
+	}
 }
