@@ -7,6 +7,7 @@ type Store[K comparable, V any] interface {
 	Set(key K, value V)
 	Del(key K) (V, bool)
 	All() map[K]V
+	Each(func(K, V) bool)
 }
 
 var _ Store[string, string] = &store[string, string]{}
@@ -48,4 +49,14 @@ func (s *store[K, V]) Del(key K) (V, bool) {
 
 func (s *store[K, V]) All() map[K]V {
 	return s.pool
+}
+
+func (s *store[K, V]) Each(f func(key K, value V) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for k, v := range s.pool {
+		if f(k, v) {
+			break
+		}
+	}
 }

@@ -281,10 +281,19 @@ func (s *Server) Sessions() Store[any, Session] {
 	return s.sessionStore
 }
 
-func (s *Server) BroadCast(id interface{}, v interface{}) {
-	for _, sess := range s.sessionStore.All() {
-		c := sess.AllocateContext()
-		c.SetResponse(id, v)
-		c.Send()
+func (s *Server) BroadCast(id interface{}, v interface{}) error {
+	data, err := s.Codec.Encode(v)
+	if err != nil {
+		return err
 	}
+	msg := NewMessage(id, data)
+	for _, sess := range s.sessionStore.All() {
+		go func() {
+			ok := sess.AllocateContext().SetResponseMessage(msg).Send()
+			if !ok {
+				sess.Close()
+			}
+		}()
+	}
+	return nil
 }

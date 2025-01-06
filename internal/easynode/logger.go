@@ -18,10 +18,10 @@ func NewCustomLogger() *zap.SugaredLogger {
 		TimeKey:     "time",
 		LevelKey:    "level",
 		MessageKey:  "msg",
-		CallerKey:   "caller",
+		// CallerKey:   "caller",
 		EncodeLevel: func(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(level.CapitalString()) },
 		EncodeTime:  zapcore.ISO8601TimeEncoder,
-		EncodeCaller: zapcore.ShortCallerEncoder,
+		// EncodeCaller: zapcore.ShortCallerEncoder,
 	}
 	core := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),

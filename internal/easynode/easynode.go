@@ -46,26 +46,22 @@ func runTun(ch chan<- error) {
 
 func runPostRun(ch chan<- error) {
 	Load(_server)
-	var addrs []Address
-	_db.Model(&Address{}).Where("node_id = ?", _config.NodeID).Find(&addrs)
-	msg := &InfoMessage{
-		Node:    Entity[Node]{Create: []Node{{ID: _config.NodeID}}},
-		Address: Entity[Address]{Create: addrs},
-	}
+	msg := JoinMessage{ID: _config.NodeID, Addresses: []Address{}}
+	_db.Model(&Address{}).Where("node_id = ?", _config.NodeID).Find(&msg.Addresses)
 	wg := sync.WaitGroup{}
 	for _, peer := range _config.Peers {
-		go func(addr string) {
+		go func(addr string, msg JoinMessage) {
 			for {
-				err := _server.Request(addr, ID_JOIN, msg)
+				err := _server.Request(addr, ID_JOIN, &msg)
 				if err == nil {
 					// _log.Infof("CONNECT PEER SUCCESS %s", addr)
 					break
 				}
 				// _log.Errorf("CONNECT PEER ERROR %s", err.Error())
-				time.Sleep(time.Second * 5)
+				time.Sleep(time.Second)
 			}
 			wg.Done()
-		}(peer)
+		}(peer, msg)
 		wg.Add(1)
 	}
 	wg.Wait()

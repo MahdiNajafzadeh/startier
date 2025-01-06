@@ -3,6 +3,7 @@ package easynode
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/mitchellh/hashstructure/v2"
 	"gorm.io/driver/sqlite"
@@ -10,14 +11,24 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+const (
+	DB_FILE_PATH = "/tmp/easynode.db"
+	DB_MEM_PATH  = "file::memory:?mode=memory&cache=shared"
+)
+
 var _db *gorm.DB
 
 func init() {
+	if _, err := os.Stat(DB_FILE_PATH); err == nil {
+		if err := os.Remove(DB_FILE_PATH); err != nil {
+			panic(err)
+		}
+	}
 	var logLevel logger.LogLevel
 	logLevel = logger.Error
 	logLevel = logger.Info
 	logLevel = logger.Silent
-	db, err := gorm.Open(sqlite.Open("file::memory:?mode=memory&cache=shared"), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(DB_FILE_PATH), &gorm.Config{
 		Logger: logger.Default.LogMode(logLevel),
 	})
 	if err != nil {
@@ -50,7 +61,6 @@ type Connection struct {
 }
 
 type Edge struct {
-	ID   int    `gorm:"primaryKey" msgp:"id" json:"id" hash:"-"`
 	From string `gorm:"index:unique_edge_idx,unique" msgp:"from" json:"from"`
 	To   string `gorm:"index:unique_edge_idx,unique" msgp:"to" json:"to"`
 }
@@ -62,18 +72,18 @@ func (a *Address) JSON() string {
 	return string(b)
 }
 
-func (a *Address) BeforeSave(tx *gorm.DB) error {
+func (a *Address) BeforeCreate(tx *gorm.DB) error {
 	hash, _ := hashstructure.Hash(a, hashstructure.FormatV2, nil)
 	a.ID = fmt.Sprintf("%d", hash)
-	go tx.Create(&Node{ID: a.NodeID})
 	return nil
 }
 
-func (a *Address) AfterSave(tx *gorm.DB) error {
+func (a *Address) AfterCreate(tx *gorm.DB) error {
 	// _log.Infof("(+) ADDRESS    %s", a.JSON())
 	if !a.IsPrivate {
 		go _server.Connect(a.HostPort)
 	}
+	go tx.Create(&Node{ID: a.NodeID})
 	return nil
 }
 
@@ -84,24 +94,9 @@ func (n *Node) JSON() string {
 	return string(b)
 }
 
-func (n *Node) GraphID() int64 {
-	h, _ := hashstructure.Hash(n, hashstructure.FormatV2, nil)
-	return int64(h)
-}
-
-func (n *Node) BeforeSave(tx *gorm.DB) error {
-	return nil
-}
-
-func (n *Node) AfterSave(tx *gorm.DB) error {
-	// _log.Infof("(+) NODE       %s", n.JSON())
-	gn, _ := _graph.NodeWithID(n.GraphID())
-	_graph.AddNode(gn)
-	return nil
-}
-
-func (n *Node) AfterDelete(tx *gorm.DB) error {
-	// _log.Infof("(-) NODE       %s", n.JSON())
+func (n *Node) AfterCreate(tx *gorm.DB) error {
+	_log.Infof("(+) NODE       %s", n.JSON())
+	_graph.AddNode(n.ID)
 	return nil
 }
 
@@ -113,38 +108,23 @@ func (c *Connection) JSON() string {
 }
 
 func (c *Connection) AfterSave(tx *gorm.DB) error {
-	// _log.Infof("(+) CONNECTION %s", c.JSON())
+	_log.Infof("(+) CONNECTION %s", c.JSON())
 	return nil
 }
 
 func (c *Connection) AfterDelete(tx *gorm.DB) error {
-	// _log.Infof("(-) CONNECTION %s", c.JSON())
+	_log.Infof("(-) CONNECTION %s", c.JSON())
 	return nil
 }
-
-//---
 
 func (g *Edge) JSON() string {
 	b, _ := json.Marshal(g)
 	return string(b)
 }
 
-func (e *Edge) BeforeSave(tx *gorm.DB) error {
-	if e.From == e.To {
-		return fmt.Errorf("'Edge.From' & 'Edge.To' is equal")
-	}
-	h, _ := hashstructure.Hash(e, hashstructure.FormatV2, nil)
-	e.ID = int(uint64(h))
-	return nil
-}
-
-func (g *Edge) AfterSave(tx *gorm.DB) error {
-	_log.Infof("(+) EDGE       %s", g.JSON())
-	_graph.SetEdge(
-		_graph.NewEdge(
-			_graph.Node(),
-			_graph.Node(),
-		),
-	)
+func (e *Edge) AfterCreate(tx *gorm.DB) error {
+	_log.Infof("(+) EDGE       %s", e.JSON())
+	_graph.AddEdge(e.From, e.To)
+	go _server.BroadCast(ID_INFO, InfoMessage{Edge: Entity[Edge]{Create: []Edge{*e}}})
 	return nil
 }

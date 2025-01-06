@@ -7,13 +7,13 @@ import (
 	"github.com/songgao/water"
 	"github.com/songgao/water/waterutil"
 	"github.com/vishvananda/netlink"
-	"gorm.io/gorm"
 )
 
 var _tun *water.Interface
 
 // var _join_msg *JoinMessage
 var _tun_conn_cache Store[any, Session]
+var _tun_addr_cache Store[any, Address]
 
 func init() {
 	_tun_conn_cache = newStore[any, Session]()
@@ -60,7 +60,6 @@ func packetLoop() {
 	ip, ipnet, _ := net.ParseCIDR(_config.Local)
 	ipnet.IP = ip
 	buf := make([]byte, 1500)
-TunLoop:
 	for {
 		n, err := _tun.Read(buf)
 		if err != nil {
@@ -74,60 +73,141 @@ TunLoop:
 		if !ipnet.Contains(dst) {
 			continue
 		}
-		var addr Address
+		var address Address
 		err = _db.
 			Model(&Address{}).
 			Where("node_id != ?", _config.NodeID).
 			Where("ip_mask LIKE ?", dst.String()+"%").
 			Where("is_private = ?", true).
-			First(&addr).
+			First(&address).
 			Error
 		if err != nil {
-			if err != gorm.ErrRecordNotFound {
-				_log.Error(err)
-			}
 			continue
 		}
-		msg := &PacketMessage{FromNode: _config.NodeID, ToNode: addr.NodeID, TTL: 10, Payload: buf[:n]}
-		s, ok := _tun_conn_cache.Get(addr.NodeID)
+		msg := &PacketMessage{FromNode: _config.NodeID, ToNode: address.NodeID, TTL: 10, Payload: buf[:n]}
+		go RoutePacket(msg)
+	}
+}
+
+func RoutePacket(msg *PacketMessage) {
+	s, ok := _tun_conn_cache.Get(msg.ToNode)
+	if ok {
+		c := s.AllocateContext()
+		c.SetResponse(ID_PACKET, msg)
+		if s.Send(c) {
+			return
+		}
+		_tun_conn_cache.Del(msg.ToNode)
+		s.Close()
+		_log.Infof("(-) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
+	}
+	var connections []Connection
+	_db.Model(&Connection{}).Where("node_id = ?", msg.ToNode).Find(&connections)
+	_log.Infof("(?) TUN | DIRECT SESSION : %s -> %s : %d", msg.FromNode, msg.ToNode, len(connections))
+	for _, conn := range connections {
+		s, ok := _server.Sessions().Get(conn.SessionID)
 		if ok {
 			c := s.AllocateContext()
 			c.SetResponse(ID_PACKET, msg)
 			if s.Send(c) {
-				continue
+				_log.Infof("(+) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
+				_tun_conn_cache.Set(msg.ToNode, s)
+				return
 			}
-			_tun_conn_cache.Del(addr.NodeID)
 			s.Close()
 		}
-		var connections []Connection
-		err = _db.
-			Model(&Connection{}).
-			Where("node_id = ?", addr.NodeID).
-			Find(&connections).
-			Error
-		if err != nil {
-			if err != gorm.ErrRecordNotFound {
-				_log.Error(err)
-			}
+	}
+	_log.Infof("(?) TUN | PROXY SESSION : %s -> %s", msg.FromNode, msg.ToNode)
+	sp := _graph.ShortestPath(msg.FromNode, msg.ToNode)
+	_log.Infof("(?) TUN | PROXY SESSION : %+v", sp)
+	if len(sp) == 0 {
+		return
+	}
+	for _, v := range sp {
+		if v == msg.FromNode || v == msg.ToNode {
 			continue
 		}
+		var connections []Connection
+		_db.Model(&Connection{}).Where("node_id = ?", v).Find(&connections)
+		_log.Infof("(?) TUN | PROXY SESSION : %+v : %s : %d", sp, v, len(connections))
 		for _, conn := range connections {
 			s, ok := _server.Sessions().Get(conn.SessionID)
 			if ok {
 				c := s.AllocateContext()
 				c.SetResponse(ID_PACKET, msg)
 				if s.Send(c) {
-					_tun_conn_cache.Set(addr.NodeID, s)
-					continue TunLoop
-				} else {
-					s.Close()
+					_log.Infof("(+) TUN | CACHE PROXY SESSION : %s : %s -> %s : %s", v, msg.FromNode, msg.ToNode, s.ID())
+					_tun_conn_cache.Set(msg.ToNode, s)
+					return
 				}
+				s.Close()
 			}
 		}
-		//-UseGraphConnection
 	}
 }
 
-func RoutePacket(msg *PacketMessage) error {
-	return nil
-}
+// func RoutePacket(msg *PacketMessage) {
+// 	s, ok := _tun_conn_cache.Get(msg.ToNode)
+// 	if ok {
+// 		c := s.AllocateContext()
+// 		c.SetResponse(ID_PACKET, msg)
+// 		if s.Send(c) {
+// 			return
+// 		}
+// 		_tun_conn_cache.Del(msg.ToNode)
+// 		s.Close()
+// 		_log.Infof("(-) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
+// 	}
+// 	_log.Infof("(?) TUN | DIRECT SESSION : %s -> %s", msg.FromNode, msg.ToNode)
+// 	for _, s := range _server.Sessions().All() {
+// 		v, ok := s.Store().Get("node_id")
+// 		if !ok {
+// 			continue
+// 		}
+// 		nodeID, ok := v.(string)
+// 		if !ok {
+// 			continue
+// 		}
+// 		if nodeID != msg.ToNode {
+// 			continue
+// 		}
+// 		c := s.AllocateContext()
+// 		c.SetResponse(ID_PACKET, msg)
+// 		if s.Send(c) {
+// 			_log.Infof("(+) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
+// 			_tun_conn_cache.Set(msg.ToNode, s)
+// 			return
+// 		}
+// 		s.Close()
+// 	}
+// 	_log.Infof("(?) TUN | PROXY SESSION : %s -> %s", msg.FromNode, msg.ToNode)
+// 	sp := _graph.ShortestPath(msg.FromNode, msg.ToNode)
+// 	_log.Infof("(?) TUN | PROXY SESSION : %+v", sp)
+// 	for _, v := range sp {
+// 		if v == msg.FromNode || v == msg.ToNode {
+// 			continue
+// 		}
+// 		_log.Infof("(?) TUN | PROXY SESSION : %+v : %s ", sp, v)
+// 		for _, s := range _server.Sessions().All() {
+// 			v, ok := s.Store().Get("node_id")
+// 			if !ok {
+// 				continue
+// 			}
+// 			nodeID, ok := v.(string)
+// 			if !ok {
+// 				continue
+// 			}
+// 			if nodeID != msg.ToNode {
+// 				continue
+// 			}
+// 			c := s.AllocateContext()
+// 			c.SetResponse(ID_PACKET, msg)
+// 			if s.Send(c) {
+// 				_log.Infof("(+) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
+// 				_tun_conn_cache.Set(msg.ToNode, s)
+// 				return
+// 			}
+// 			s.Close()
+// 		}
+// 	}
+// }

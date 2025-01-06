@@ -10,7 +10,7 @@ func initServer() error {
 			Packer:           NewDefaultPacker(),
 			Codec:            &MsgpackCodec{},
 			DoNotPrintRoutes: true,
-			AsyncRouter:      true,
+			AsyncRouter:      false,
 		},
 	)
 	_server.OnSessionCreate = func(s Session) {
@@ -86,89 +86,68 @@ func initServer() error {
 			return
 		}
 		msg.TTL -= 1
-		s, ok := _tun_conn_cache.Get(msg.ToNode)
-		if ok {
-			c := s.AllocateContext()
-			c.SetResponse(ID_PACKET, &msg)
-			if c.Send() {
-				return
-			}
-			_tun_conn_cache.Del(s.ID())
-			s.Close()
-		}
-		var connections []Connection
-		err := _db.
-			Model(&Connection{}).
-			Where("node_id = ?", msg.ToNode).
-			Find(&connections).
-			Error
-		if err != nil {
-			_log.Error(err)
-			return
-		}
-		for _, conn := range connections {
-			s, ok := _server.Sessions().Get(conn.SessionID)
-			if ok {
-				c := s.AllocateContext()
-				c.SetResponse(ID_PACKET, &msg)
-				if s.Send(c) {
-					_tun_conn_cache.Set(msg.ToNode, s)
-					break
-				} else {
-					s.Close()
-				}
-			}
-		}
+		go RoutePacket(&msg)
 	})
 	_server.AddRoute(ID_CONFLICT, func(c Context) {
 		_log.Error(c.Session().Conn().RemoteAddr())
 		_log.Fatal("NET CONFLIC")
 	})
 	_server.AddRoute(ID_JOIN, func(c Context) {
-		var msg InfoMessage
+		var msg JoinMessage
 		if err := c.Bind(&msg); err != nil {
 			return
 		}
-		if len(msg.Node.Create) == 0 {
+		if msg.ID == "" {
 			return
 		}
-		node := msg.Node.Create[0]
-		if node.ID == _config.NodeID {
+		if msg.ID == _config.NodeID {
 			c.SetResponse(ID_CONFLICT, 0)
-			c.Send()
 			return
 		}
-		bmsg := msg
-		bmsg.Node = Entity[Node]{Create: msg.Node.Create}
-		bmsg.Edge = Entity[Edge]{Create: []Edge{{From: node.ID, To: _config.NodeID}}}
-		bmsg.Address = Entity[Address]{Create: []Address{}}
-		for _, v := range msg.Address.Create {
-			if v.IsPrivate && v.IPMask == _config.Local {
+		if len(msg.Addresses) == 0 {
+			return
+		}
+		for _, v := range msg.Addresses {
+			var paddr Address
+			_db.Model(&paddr).Where("node_id != ? AND ip_mask = ? AND is_private = ?", v.NodeID, v.IPMask, true).First(&paddr)
+			if paddr.ID != "" {
 				c.SetResponse(ID_CONFLICT, 0)
-				c.Send()
 				return
 			}
-			var count int64
-			_db.Model(&Address{}).Where(&v).Count(&count)
-			if count == 0 {
-				bmsg.Address.Create = append(bmsg.Address.Create, v)
-			}
 		}
-		_db.Create(&bmsg.Address.Create)
-		_db.Create(&bmsg.Edge.Create)
-		_server.BroadCast(ID_INFO, bmsg)
+		bmsg := NewInfoMessage()
+		bmsg.Address.Create = msg.Addresses
+		bmsg.Node.Create = append(bmsg.Node.Create, Node{ID: msg.ID})
+		bmsg.Edge.Create = append(bmsg.Edge.Create, Edge{From: msg.ID, To: _config.NodeID})
+		for _, v := range bmsg.Node.Create {
+			_db.Create(&v)
+		}
+		for _, v := range bmsg.Address.Create {
+			_db.Create(&v)
+		}
+		for _, v := range bmsg.Edge.Create {
+			_db.Create(&v)
+		}
+		_db.Model(&Node{}).Find(&bmsg.Node.Create)
+		_db.Model(&Address{}).Find(&bmsg.Address.Create)
+		_db.Model(&Edge{}).Find(&bmsg.Edge.Create)
+		_server.BroadCast(ID_INFO, &bmsg)
+		c.SetResponse(ID_INFO, &bmsg)
 	})
 	_server.AddRoute(ID_INFO, func(c Context) {
 		var msg InfoMessage
 		if err := c.Bind(&msg); err != nil {
 			return
 		}
-		_db.Model(&Address{}).Create(&msg.Address.Create)
-		_db.Model(&Node{}).Create(&msg.Node.Create)
-		_db.Model(&Edge{}).Create(&msg.Edge.Create)
-		_db.Model(&Address{}).Delete(&msg.Address.Delete)
-		_db.Model(&Node{}).Delete(&msg.Node.Delete)
-		_db.Model(&Edge{}).Delete(&msg.Edge.Delete)
+		for _, v := range msg.Node.Create {
+			_db.Create(&v)
+		}
+		for _, v := range msg.Address.Create {
+			_db.Create(&v)
+		}
+		for _, v := range msg.Edge.Create {
+			_db.Create(&v)
+		}
 	})
 	err := _server.Run(_config.Listen)
 	return err

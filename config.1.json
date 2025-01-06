@@ -3,7 +3,10 @@
     "local": "192.168.100.1/24",
     "listen": "0.0.0.0:8080",
     "peers": [
-        "inner.tartanak.local:8080",
-        "edge.tartanak.local:8080"
+    ],
+    "sss" : [
+        "edge.tartanak.local:8080",
+        "inner.tartanak.local:8080"
+
     ]
 }
