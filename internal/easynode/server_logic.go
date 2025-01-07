@@ -149,6 +149,18 @@ func initServer() error {
 			_db.Create(&v)
 		}
 	})
-	err := _server.Run(_config.Listen)
-	return err
+	if _config.TLS.Enable {
+		tlsConfig, err := loadTLSConfig(_config.TLS.Public, _config.TLS.Private, _config.TLS.Private)
+		if err != nil {
+			return err
+		}
+		if err = _server.RunTLS(_config.Listen, tlsConfig); err != nil {
+			return err
+		}
+	} else {
+		if err := _server.Run(_config.Listen); err != nil {
+			return err
+		}
+	}
+	return nil
 }

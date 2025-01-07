@@ -1,6 +1,9 @@
 package easynode
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -23,10 +26,6 @@ func GetLog() *zap.SugaredLogger {
 	return _log
 }
 
-// func GetJoinMessage() *JoinMessage {
-// 	return _join_msg
-// }
-
 func LoadStop[T any](getter func() *T) {
 	for getter() == nil {
 		time.Sleep(time.Millisecond * 100)
@@ -43,16 +42,29 @@ func Load(v interface{}) {
 		LoadStop(GetServer)
 	case *zap.SugaredLogger:
 		LoadStop(GetLog)
-	// case *JoinMessage:
-	// 	LoadStop(GetJoinMessage)
 	default:
 		panic("type is not in list")
 	}
 }
 
-// func Load[T any](v *T) *T {
-// 	for v == nil {
-// 		time.Sleep(time.Microsecond * 100)
-// 	}
-// 	return v
-// }
+func loadTLSConfig(public, private, ca string) (*tls.Config, error) {
+	cert, err := tls.LoadX509KeyPair(public, private)
+	if err != nil {
+		return nil, err
+	}
+	var caCertPool *x509.CertPool
+	if ca != "" {
+		caCert, err := os.ReadFile(ca)
+		if err != nil {
+			return nil, err
+		}
+		caCertPool = x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		ClientCAs:    caCertPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}, nil
+}

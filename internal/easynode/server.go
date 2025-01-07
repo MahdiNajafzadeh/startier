@@ -247,9 +247,10 @@ func (s *Server) Connect(addr string) (net.Conn, error) {
 	} else {
 		conn, err = net.Dial("tcp", addr)
 	}
-	if err == nil || conn != nil {
-		go s.handleConn(conn)
+	if err != nil {
+		return nil, err
 	}
+	go s.handleConn(conn)
 	return conn, err
 }
 
@@ -273,7 +274,6 @@ func (s *Server) Request(addr string, id interface{}, v interface{}) error {
 		conn.Close()
 		return err
 	}
-	go s.handleConn(conn)
 	return nil
 }
 
@@ -289,10 +289,7 @@ func (s *Server) BroadCast(id interface{}, v interface{}) error {
 	msg := NewMessage(id, data)
 	for _, sess := range s.sessionStore.All() {
 		go func() {
-			ok := sess.AllocateContext().SetResponseMessage(msg).Send()
-			if !ok {
-				sess.Close()
-			}
+			sess.AllocateContext().SetResponseMessage(msg).Send()
 		}()
 	}
 	return nil

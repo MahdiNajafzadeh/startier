@@ -8,10 +8,21 @@ import (
 )
 
 type Config struct {
-	NodeID string   `json:"node_id" msgp:"node_id"`
-	Local  string   `json:"local"   msgp:"local"`
-	Listen string   `json:"listen"  msgp:"listen"`
-	Peers  []string `json:"peers"   msgp:"peers"`
+	NodeID string `json:"node_id" msgp:"node_id"`
+	Local  string `json:"local"   msgp:"local"`
+	Listen string `json:"listen"  msgp:"listen"`
+	TLS    struct {
+		Enable  bool   `json:"enable"`
+		Private string `json:"private"`
+		Public  string `json:"public"`
+		CA      string `json:"ca"`
+	} `json:"tls"`
+	Peers []string `json:"peers"   msgp:"peers"`
+	Web   struct {
+		Enable bool   `json:"enable"`
+		TLS    bool   `json:"tls"`
+		Listen string `json:"listen"`
+	} `json:"web"`
 }
 
 var _config *Config

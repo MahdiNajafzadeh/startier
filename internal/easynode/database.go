@@ -55,15 +55,16 @@ type Address struct {
 	IsPrivate bool   `gorm:"index:unique_address_idx,unique" msgp:"is_private" json:"is_private"`
 }
 
+type Edge struct {
+	From string `gorm:"index:unique_edge_idx,unique" msgp:"from" json:"from"`
+	To   string `gorm:"index:unique_edge_idx,unique" msgp:"to" json:"to"`
+}
+
 type Connection struct {
 	SessionID string `grom:"primaryKey" msgp:"session_id" json:"session_id"`
 	NodeID    string `msgp:"node_id" json:"node_id"`
 }
 
-type Edge struct {
-	From string `gorm:"index:unique_edge_idx,unique" msgp:"from" json:"from"`
-	To   string `gorm:"index:unique_edge_idx,unique" msgp:"to" json:"to"`
-}
 
 //---
 
@@ -79,7 +80,7 @@ func (a *Address) BeforeCreate(tx *gorm.DB) error {
 }
 
 func (a *Address) AfterCreate(tx *gorm.DB) error {
-	// _log.Infof("(+) ADDRESS    %s", a.JSON())
+	_log.Infof("(+) ADDRESS    %s", a.JSON())
 	if !a.IsPrivate {
 		go _server.Connect(a.HostPort)
 	}

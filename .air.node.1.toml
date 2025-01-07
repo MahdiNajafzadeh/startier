@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-args_bin = ["--config=config.1.json"]
+args_bin = ["--config=files/configs/config.1.json"]
 bin = "./tmp/main"
 cmd = "go build -o ./tmp/main ."
 delay = 1000

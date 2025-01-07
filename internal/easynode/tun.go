@@ -10,10 +10,7 @@ import (
 )
 
 var _tun *water.Interface
-
-// var _join_msg *JoinMessage
 var _tun_conn_cache Store[any, Session]
-var _tun_addr_cache Store[any, Address]
 
 func init() {
 	_tun_conn_cache = newStore[any, Session]()
@@ -145,69 +142,3 @@ func RoutePacket(msg *PacketMessage) {
 		}
 	}
 }
-
-// func RoutePacket(msg *PacketMessage) {
-// 	s, ok := _tun_conn_cache.Get(msg.ToNode)
-// 	if ok {
-// 		c := s.AllocateContext()
-// 		c.SetResponse(ID_PACKET, msg)
-// 		if s.Send(c) {
-// 			return
-// 		}
-// 		_tun_conn_cache.Del(msg.ToNode)
-// 		s.Close()
-// 		_log.Infof("(-) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
-// 	}
-// 	_log.Infof("(?) TUN | DIRECT SESSION : %s -> %s", msg.FromNode, msg.ToNode)
-// 	for _, s := range _server.Sessions().All() {
-// 		v, ok := s.Store().Get("node_id")
-// 		if !ok {
-// 			continue
-// 		}
-// 		nodeID, ok := v.(string)
-// 		if !ok {
-// 			continue
-// 		}
-// 		if nodeID != msg.ToNode {
-// 			continue
-// 		}
-// 		c := s.AllocateContext()
-// 		c.SetResponse(ID_PACKET, msg)
-// 		if s.Send(c) {
-// 			_log.Infof("(+) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
-// 			_tun_conn_cache.Set(msg.ToNode, s)
-// 			return
-// 		}
-// 		s.Close()
-// 	}
-// 	_log.Infof("(?) TUN | PROXY SESSION : %s -> %s", msg.FromNode, msg.ToNode)
-// 	sp := _graph.ShortestPath(msg.FromNode, msg.ToNode)
-// 	_log.Infof("(?) TUN | PROXY SESSION : %+v", sp)
-// 	for _, v := range sp {
-// 		if v == msg.FromNode || v == msg.ToNode {
-// 			continue
-// 		}
-// 		_log.Infof("(?) TUN | PROXY SESSION : %+v : %s ", sp, v)
-// 		for _, s := range _server.Sessions().All() {
-// 			v, ok := s.Store().Get("node_id")
-// 			if !ok {
-// 				continue
-// 			}
-// 			nodeID, ok := v.(string)
-// 			if !ok {
-// 				continue
-// 			}
-// 			if nodeID != msg.ToNode {
-// 				continue
-// 			}
-// 			c := s.AllocateContext()
-// 			c.SetResponse(ID_PACKET, msg)
-// 			if s.Send(c) {
-// 				_log.Infof("(+) TUN | CACHE SESSION : %s -> %s : %s", msg.FromNode, msg.ToNode, s.ID())
-// 				_tun_conn_cache.Set(msg.ToNode, s)
-// 				return
-// 			}
-// 			s.Close()
-// 		}
-// 	}
-// }
