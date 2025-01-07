@@ -1,0 +1,20 @@
+{
+    "node_id": "node_2",
+    "local": "192.168.100.2/24",
+    "listen": ":8080",
+    "peers": [
+        "dev.tartanak.local:8080",
+        "inner.tartanak.local:8080"
+    ],
+    "tls": {
+        "enable": false,
+        "private": "files/certs/node.key",
+        "public": "files/certs/node.crt",
+        "ca": "files/certs/ca.crt"
+    },
+    "web": {
+        "enable": true,
+        "tls": false,
+        "listen": ":3000"
+    }
+}
